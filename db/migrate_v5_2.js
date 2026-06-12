@@ -6,8 +6,7 @@
 
 const { Pool } = require('pg');
 
-const DATABASE_URL = process.env.DATABASE_URL || 
-  'postgresql://neondb_owner:npg_mHoXu7N8AYWT@ep-odd-flower-a2ks7aoy-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require';
+const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://localhost:5432/animaxia';
 
 async function migrate() {
   const pool = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } });

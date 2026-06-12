@@ -418,7 +418,9 @@
 
     // Google Identity Services: inițializare o singură dată
     _googleInitialized: false,
-    _googleClientId: '139271054187-buc551hfaid5e5g7563326hp9i9d5jf5.apps.googleusercontent.com',
+    // Google OAuth Client ID - configure in .env or replace with your own
+    // Get one at https://console.cloud.google.com/apis/credentials
+    _googleClientId: window.__GOOGLE_CLIENT_ID || localStorage.getItem('google_client_id') || '139271054187-buc551hfaid5e5g7563326hp9i9d5jf5.apps.googleusercontent.com',
 
     async _initGoogleGIS() {
       if (this._googleInitialized) return true;

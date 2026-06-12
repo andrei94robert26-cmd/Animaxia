@@ -13,16 +13,18 @@ async function getFetch() {
 }
 
 // ====== API KEYS ======
+// NOTE: To use real APIs, set the corresponding environment variables in .env
+// These are placeholders — the platform will still work but with limited/no external data.
 const KEYS = {
-  TMDB: process.env.TMDB_API_KEY || '3dd880e229e7b83d8e63c4b6f08f77a4',
-  OMDB: process.env.OMDB_API_KEY || '6a73f6e7',
-  YOUTUBE: process.env.YOUTUBE_API_KEY || 'AIzaSyB0QWWDu3BAkKROnlC6Iy6h_8i8M1moacw',
-  FOOTBALL_DATA: process.env.FOOTBALL_DATA_API_KEY || '8053ce106f444e9ca7d1bdf859b81b99',
-  BALLDONTLIE: process.env.BALLDONTLIE_API_KEY || '552b85f6-65b9-4aa7-b058-8201ebc06e47',
-  OPENSUBTITLES: process.env.OPENSUBTITLES_API_KEY || 'iHdrgVgNTYZQXZhW75Clfa62A5knFn7n',
-  ALGOLIA_APP_ID: process.env.ALGOLIA_APP_ID || 'UXJ7AIE2YY',
-  ALGOLIA_ADMIN_KEY: process.env.ALGOLIA_ADMIN_KEY || '07c3230cc588cc0037442ea25b2a1591',
-  ALGOLIA_SEARCH_KEY: process.env.ALGOLIA_SEARCH_KEY || '6c57a5cedeba761a7c19271903d92e15',
+  TMDB: process.env.TMDB_API_KEY || '',
+  OMDB: process.env.OMDB_API_KEY || '',
+  YOUTUBE: process.env.YOUTUBE_API_KEY || '',
+  FOOTBALL_DATA: process.env.FOOTBALL_DATA_API_KEY || '',
+  BALLDONTLIE: process.env.BALLDONTLIE_API_KEY || '',
+  OPENSUBTITLES: process.env.OPENSUBTITLES_API_KEY || '',
+  ALGOLIA_APP_ID: process.env.ALGOLIA_APP_ID || '',
+  ALGOLIA_ADMIN_KEY: process.env.ALGOLIA_ADMIN_KEY || '',
+  ALGOLIA_SEARCH_KEY: process.env.ALGOLIA_SEARCH_KEY || '',
 };
 
 // ====== CACHE ======
@@ -298,7 +300,10 @@ async function algoliaSaveObject(indexName, obj) {
       }
     );
     return res.ok;
-  } catch { return false; }
+  } catch (e) {
+    console.error(`❌ [API Gateway] Algolia save failed:`, e.message);
+    return false;
+  }
 }
 
 // ====== 9. OPENSUBTITLES ======
@@ -318,7 +323,10 @@ async function opensubtitlesDownload(fileId) {
     });
     if (!res.ok) return null;
     return res.json();
-  } catch { return null; }
+  } catch (e) {
+    console.error(`❌ [API Gateway] OpenSubtitles download failed:`, e.message);
+    return null;
+  }
 }
 
 // ====== 10. FOOTBALL-DATA.ORG ======
@@ -497,7 +505,10 @@ async function rssFetch(feedUrl) {
   try {
     const data = await apiFetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(feedUrl)}`);
     return data?.items || [];
-  } catch { return []; }
+  } catch (e) {
+    console.error(`❌ [API Gateway] RSS fetch failed:`, e.message);
+    return [];
+  }
 }
 
 // ====== 21. MYDRAMALIST / K-DRAMA SCRAPING ======
@@ -617,7 +628,9 @@ async function searchAll(query, limit = 20) {
         }
       }
     }
-  } catch {}
+  } catch (e) {
+    console.warn(`⚠️ [API Gateway] TMDB search failed for '${query}': ${e.message}`);
+  }
 
   // Search Jikan (anime)
   try {
@@ -643,7 +656,9 @@ async function searchAll(query, limit = 20) {
         });
       }
     }
-  } catch {}
+  } catch (e) {
+    console.warn(`⚠️ [API Gateway] Jikan search failed for '${query}': ${e.message}`);
+  }
 
   // Search TVMaze (TV shows)
   try {
@@ -671,7 +686,9 @@ async function searchAll(query, limit = 20) {
         });
       }
     }
-  } catch {}
+  } catch (e) {
+    console.warn(`⚠️ [API Gateway] TVMaze search failed for '${query}': ${e.message}`);
+  }
 
   return results.slice(0, limit);
 }

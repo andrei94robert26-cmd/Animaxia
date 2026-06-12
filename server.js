@@ -50,7 +50,10 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ server, path: '/ws' });
 
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(64).toString('hex');
+const JWT_SECRET = process.env.JWT_SECRET || (() => {
+  console.warn('⚠️ JWT_SECRET not set. Generate one with: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"');
+  return 'dev-jwt-secret-not-secure-replace-in-production';
+})();
 const JWT_EXPIRES = '7d';
 const STRIPE_SECRET = process.env.STRIPE_SECRET || '';
 const RESEND_KEY = process.env.RESEND_API_KEY || '';
@@ -144,7 +147,7 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false
 }));
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*',
+  origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
@@ -169,8 +172,7 @@ app.use('/api/admin/', rateLimit({ windowMs: 15 * 60 * 1000, max: 60 }));
 
 // PostgreSQL
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 
-    'postgresql://neondb_owner:npg_mHoXu7N8AYWT@ep-odd-flower-a2ks7aoy-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=verify-full',
+  connectionString: process.env.DATABASE_URL || 'postgresql://localhost:5432/animaxia',
   ssl: { rejectUnauthorized: false },
   max: 25,  // Increased pool size for better concurrency
   idleTimeoutMillis: 30000,
@@ -459,20 +461,22 @@ app.get('/api/stream/:id', async (req, res) => {
         if (rows.length > 0 && rows[0].trailer_url) {
           return res.redirect(rows[0].trailer_url);
         }
-      } catch {}
+      } catch (e) {
+        console.error(`❌ [Stream] Trailer query failed:`, e.message);
+      }
       // Try to get YouTube trailer via API gateway for external streaming
       try {
         const { rows: [content] } = await pool.query('SELECT title, title_en, content_type FROM content_items WHERE id = $1', [req.params.id]);
         if (content) {
-          const { youtubeSearchTrailer } = require('./api-gateway');
-          const searchQuery = content.title_en || content.title;
-          const trailers = await youtubeSearchTrailer(searchQuery);
+          const trailers = await apiGateway.youtubeSearchTrailer(content.title_en || content.title);
           if (trailers && trailers.length > 0) {
             // Redirect to trailer - browser handles the rest
             return res.redirect(trailers[0].url);
           }
         }
-      } catch {}
+      } catch (e) {
+        console.error(`❌ [Stream] YouTube trailer search failed:`, e.message);
+      }
       return res.status(404).json({ error: 'Video not available', message: 'Streaming content not yet available for this title. Try the trailer instead.' });
     }
     
@@ -1891,8 +1895,8 @@ let webPushInitialized = false;
 try {
   webPush = require('web-push');
   // Generate VAPID keys if not in env
-  const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || 'BPGMviqBbrFKlOzy6f0b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3g4h5i6j7k8l';
-  const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || '7f8g9h0j1k2l3m4n5o6p7q8r9s0t1u2v3w4x5y6z7a8b9c0d1e2f3g4h5i6j';
+  const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || '';
+  const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || '';
   webPush.setVapidDetails('mailto:contact@animaxia.ro', vapidPublicKey, vapidPrivateKey);
   webPushInitialized = true;
   console.log('✅ Web Push initialized');
@@ -1996,6 +2000,11 @@ app.post('/api/push/broadcast', requireAdmin, async (req, res) => {
 
 // ====== INTEGRATE REAL API GATEWAY ======
 const apiGateway = require('./api-gateway');
+
+// Verify apiGateway loaded correctly
+if (!apiGateway || !apiGateway.searchAll) {
+  console.error('❌ api-gateway failed to load!');
+}
 
 // Universal search across TMDB, Jikan, TVMaze
 app.get('/api/discover/search', async (req, res) => {
