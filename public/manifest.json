@@ -1,0 +1,92 @@
+{
+  "name": "Animaxia - Platforma Premium de Streaming",
+  "short_name": "Animaxia",
+  "description": "Descoperă lumea entertainmentului cu Animaxia. Filme, seriale, documentare, Live TV și recomandări personalizate — toate într-o platformă premium.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0f",
+  "theme_color": "#6c5ce7",
+  "orientation": "any",
+  "categories": ["entertainment", "video", "streaming", "tv", "movies", "social"],
+  "lang": "ro",
+  "scope": "/",
+  "dir": "ltr",
+  "display_override": ["standalone", "window-controls-overlay"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Caută conținut",
+      "short_name": "Search",
+      "description": "Caută filme, seriale și emisiuni",
+      "url": "/?search",
+      "icons": [{ "src": "/icons/search.svg", "sizes": "96x96" }]
+    },
+    {
+      "name": "Lista Mea",
+      "short_name": "My List",
+      "description": "Vizualizează conținutul salvat",
+      "url": "/?my-list",
+      "icons": [{ "src": "/icons/bookmark.svg", "sizes": "96x96" }]
+    },
+    {
+      "name": "Live TV",
+      "short_name": "Live TV",
+      "description": "Vezi ghidul TV și canalele live",
+      "url": "/?live",
+      "icons": [{ "src": "/icons/icon-192.svg", "sizes": "96x96" }]
+    },
+    {
+      "name": "Tendințe",
+      "short_name": "Trending",
+      "description": "Cele mai populare conținuturi",
+      "url": "/?trending",
+      "icons": [{ "src": "/icons/icon-192.svg", "sizes": "96x96" }]
+    }
+  ],
+  "prefer_related_applications": false,
+  "related_applications": [],
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  },
+  "share_target": {
+    "action": "/?share",
+    "method": "GET",
+    "enctype": "application/x-www-form-urlencoded",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
+  "protocol_handlers": [
+    {
+      "protocol": "web+animaxia",
+      "url": "/?protocol=%s"
+    }
+  ]
+}

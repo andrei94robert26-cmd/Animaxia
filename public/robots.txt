@@ -1,0 +1,24 @@
+User-agent: *
+Allow: /
+Allow: /css/
+Allow: /js/
+Allow: /icons/
+Allow: /manifest.json
+Disallow: /api/
+Disallow: /admin
+Disallow: /db/
+Disallow: /server.js
+Disallow: /api-gateway.js
+Disallow: /package.json
+Disallow: /node_modules/
+Disallow: /*?token=
+Disallow: /*?reset=
+
+# Sitemap
+Sitemap: https://animaxia.ro/sitemap.xml
+
+# Crawl rate
+Crawl-Delay: 10
+
+# Host
+Host: https://animaxia.ro

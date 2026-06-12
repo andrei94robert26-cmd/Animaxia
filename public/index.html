@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Animaxia - Platforma de Streaming Premium</title>
+  <meta name="description" content="Animaxia - Descoperă lumea entertainmentului. Filme, seriale, documentare și live TV.">
+  <meta name="theme-color" content="#6c5ce7">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Animaxia">
+  <meta name="application-name" content="Animaxia">
+  <meta name="mobile-web-app-capable" content="yes">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/svg+xml" href="/icons/icon-192.svg">
+  <link rel="apple-touch-icon" href="/icons/icon-192.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:wght@700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    /* Loading spinner */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-spinner { width:40px;height:40px;border:3px solid rgba(255,255,255,0.1);border-top-color:#6c5ce7;border-radius:50%;animation:spin 0.8s linear infinite; }
+  </style>
+  <style>
+    /* PWA install prompt - z-index BEL loading screen */
+    .pwa-install-banner { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); z-index: 99990; background: var(--bg-tertiary); border: 1px solid rgba(255,255,255,0.1); border-radius: var(--radius-md); padding: 12px 20px; display: none; align-items: center; gap: 12px; box-shadow: var(--shadow-lg); animation: toastIn 0.3s ease; max-width: 90vw; }
+    .pwa-install-banner.show { display: flex; }
+    .pwa-install-banner button { flex-shrink: 0; }
+    @media (display-mode: standalone) { .pwa-install-banner { display: none !important; } }
+  </style>
+  <script>
+    // ====== GLOBAL ERROR HANDLER ======
+    window.onerror = function(msg, url, line, col, err) {
+      console.error('🔥 GLOBAL ERROR:', msg, url, line, col);
+      // Show error message on loading screen
+      var ls = document.getElementById('loading-screen');
+      if (ls && ls.style.display !== 'none') {
+        var subtitle = ls.querySelector('.loading-subtitle');
+        if (subtitle) {
+          subtitle.innerHTML = '⚠️ Eroare la încărcare. Se încearcă recuperarea...';
+          subtitle.style.color = '#e74c3c';
+        }
+        // Still hide after 5s
+        setTimeout(function() {
+          ls.style.display = 'none';
+        }, 3000);
+      }
+      return true;
+    };
+    window.addEventListener('unhandledrejection', function(e) {
+      console.error('🔥 UNHANDLED PROMISE:', e.reason);
+    });
+
+    // FAILSAFE: Ascunde loading screen după 5 secunde (doar dacă e încă vizibil)
+    // și arată buton de retry DOAR dacă niciun ecran (login, profile, app) nu s-a încărcat
+    setTimeout(function() {
+      var ls = document.getElementById('loading-screen');
+      if (!ls) return;
+      // Verifică dacă loading screen e ÎNCĂ vizibil (n-a fost ascuns de init())
+      if (ls.style.display !== 'none') {
+        ls.style.display = 'none';
+        // Verifică dacă vreun ecran de conținut e vizibil (login, profile, app)
+        var loginEl = document.getElementById('login-screen');
+        var profileEl = document.getElementById('profile-screen');
+        var appEl = document.getElementById('app');
+        var anyScreenVisible = (loginEl && loginEl.style.display !== 'none' && loginEl.style.display !== '') ||
+                               (profileEl && profileEl.style.display !== 'none' && profileEl.style.display !== '') ||
+                               (appEl && appEl.style.display !== 'none' && appEl.style.display !== '');
+        if (!anyScreenVisible) {
+          // Niciun ecran nu s-a încărcat - arată buton de retry
+          var tryAgain = document.createElement('div');
+          tryAgain.id = 'retryBanner';
+          tryAgain.style.cssText = 'position:fixed;bottom:180px;left:50%;transform:translateX(-50%);z-index:99995;background:rgba(231,76,60,0.95);color:white;padding:16px 24px;border-radius:12px;font-size:14px;text-align:center;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,0.5);';
+          tryAgain.innerHTML = '<p style="margin-bottom:12px;">⚠️ Platforma întâmpină probleme la încărcare</p><button onclick="location.reload()" style="background:white;color:#e74c3c;border:none;padding:8px 24px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;margin-right:8px;">Reîncarcă</button><button onclick="this.parentElement.remove(); if(document.getElementById(\'pwaInstallBanner\')) document.getElementById(\'pwaInstallBanner\').classList.add(\'show\');" style="background:transparent;color:white;border:1px solid rgba(255,255,255,0.3);padding:8px 24px;border-radius:8px;font-size:14px;cursor:pointer;">Continuă</button>';
+          document.body.appendChild(tryAgain);
+        }
+      }
+    }, 5000);
+  </script>
+</head>
+<body>
+  <!-- Loading Screen (cu failsafe: ascuns automat după 5s) -->
+  <div id="loading-screen" class="loading-screen">
+    <div class="loading-content">
+      <div class="loading-logo">
+        <span class="loading-logo-icon">✦</span>
+        <span class="loading-logo-text">Animaxia</span>
+      </div>
+      <div class="loading-bar">
+        <div class="loading-bar-progress"></div>
+      </div>
+      <p class="loading-subtitle">Pregătim magia pentru tine...</p>
+    </div>
+  </div>
+
+  <!-- Login Screen -->
+  <div id="login-screen" class="auth-screen" style="display:none;">
+    <div class="auth-container">
+      <div class="auth-logo">
+        <span class="logo-icon">✦</span>
+        <span class="logo-text">Animaxia</span>
+        <span class="lang-switch" id="loginLangSwitch">EN</span>
+      </div>
+      <h2 class="auth-title" data-lang="ro">Autentificare</h2>
+      <h2 class="auth-title" data-lang="en" style="display:none;">Sign In</h2>
+      <form id="loginForm" class="auth-form">
+        <div class="auth-field">
+          <label data-lang="ro">Email</label>
+          <label data-lang="en" style="display:none;">Email</label>
+          <input type="email" id="loginEmail" placeholder="email@exemplu.ro" required autocomplete="email">
+        </div>
+        <div class="auth-field">
+          <label data-lang="ro">Parola</label>
+          <label data-lang="en" style="display:none;">Password</label>
+          <input type="password" id="loginPassword" placeholder="••••••••" required autocomplete="current-password">
+          <a href="#" class="auth-forgot" id="forgotLink" data-lang="ro">Ai uitat parola?</a>
+          <a href="#" class="auth-forgot" id="forgotLinkEn" style="display:none;" data-lang="en">Forgot password?</a>
+        </div>
+        <p id="authError" class="auth-error"></p>
+        <button type="submit" class="btn btn-primary auth-btn" data-lang="ro">Intră în cont</button>
+        <button type="submit" class="btn btn-primary auth-btn" data-lang="en" style="display:none;">Sign In</button>
+        <div class="auth-divider"><span data-lang="ro">sau</span><span data-lang="en" style="display:none;">or</span></div>
+        <button type="button" class="btn btn-google" id="googleLoginBtn"><i class="fab fa-google"></i> <span data-lang="ro">Conectează-te cu Google</span><span data-lang="en" style="display:none;">Sign in with Google</span></button>
+        <p class="auth-switch"><span data-lang="ro">Nu ai cont?</span><span data-lang="en" style="display:none;">Don't have an account?</span> <a href="#" id="loginToggle" data-lang="ro">Înregistrează-te</a><a href="#" id="loginToggleEn" style="display:none;" data-lang="en">Sign up</a></p>
+      </form>
+    </div>
+  </div>
+
+  <!-- Register Screen -->
+  <div id="register-screen" class="auth-screen" style="display:none;">
+    <div class="auth-container">
+      <div class="auth-logo">
+        <span class="logo-icon">✦</span>
+        <span class="logo-text">Animaxia</span>
+      </div>
+      <h2 class="auth-title" data-lang="ro">Crează cont nou</h2>
+      <h2 class="auth-title" data-lang="en" style="display:none;">Create Account</h2>
+      <form id="registerForm" class="auth-form">
+        <div class="auth-field">
+          <label data-lang="ro">Nume complet</label>
+          <label data-lang="en" style="display:none;">Full name</label>
+          <input type="text" id="regName" placeholder="Numele tău" required autocomplete="name">
+        </div>
+        <div class="auth-field">
+          <label>Email</label>
+          <input type="email" id="regEmail" placeholder="email@exemplu.ro" required autocomplete="email">
+        </div>
+        <div class="auth-field">
+          <label data-lang="ro">Parolă</label>
+          <label data-lang="en" style="display:none;">Password</label>
+          <input type="password" id="regPassword" placeholder="Minim 6 caractere" required autocomplete="new-password">
+          <div class="password-strength" id="passwordStrength">
+            <div class="ps-bar"><div class="ps-fill" id="psFill"></div></div>
+            <span class="ps-text" id="psText"></span>
+          </div>
+        </div>
+        <div class="auth-field">
+          <label data-lang="ro">Confirmă parola</label>
+          <label data-lang="en" style="display:none;">Confirm password</label>
+          <input type="password" id="regConfirm" placeholder="Rescrie parola" required autocomplete="new-password">
+        </div>
+        <p id="registerError" class="auth-error"></p>
+        <button type="submit" class="btn btn-primary auth-btn" data-lang="ro">Creează cont</button>
+        <button type="submit" class="btn btn-primary auth-btn" data-lang="en" style="display:none;">Create Account</button>
+        <p class="auth-switch"><span data-lang="ro">Ai deja cont?</span><span data-lang="en" style="display:none;">Already have an account?</span> <a href="#" id="registerToggle" data-lang="ro">Autentificare</a><a href="#" id="registerToggleEn" style="display:none;" data-lang="en">Sign in</a></p>
+      </form>
+    </div>
+  </div>
+
+  <!-- Forgot Password Screen -->
+  <div id="forgot-screen" class="auth-screen" style="display:none;">
+    <div class="auth-container">
+      <div class="auth-logo">
+        <span class="logo-icon">✦</span>
+        <span class="logo-text">Animaxia</span>
+      </div>
+      <h2 class="auth-title" data-lang="ro">Resetare parolă</h2>
+      <h2 class="auth-title" data-lang="en" style="display:none;">Reset Password</h2>
+      <p class="auth-subtitle" data-lang="ro">Introdu email-ul și îți vom trimite un link de resetare.</p>
+      <p class="auth-subtitle" data-lang="en" style="display:none;">Enter your email and we'll send you a reset link.</p>
+      <form id="forgotForm" class="auth-form">
+        <div class="auth-field">
+          <label>Email</label>
+          <input type="email" id="forgotEmail" placeholder="email@exemplu.ro" required>
+        </div>
+        <p id="forgotError" class="auth-error"></p>
+        <p id="forgotSuccess" class="auth-success" style="display:none;"></p>
+        <button type="submit" class="btn btn-primary auth-btn" data-lang="ro">Trimite link</button>
+        <button type="submit" class="btn btn-primary auth-btn" data-lang="en" style="display:none;">Send Link</button>
+        <p class="auth-switch"><a href="#" id="backToLogin"><span data-lang="ro">Înapoi la autentificare</span><span data-lang="en" style="display:none;">Back to sign in</span></a></p>
+      </form>
+    </div>
+  </div>
+
+  <!-- Reset Password Screen -->
+  <div id="reset-screen" class="auth-screen" style="display:none;">
+    <div class="auth-container">
+      <div class="auth-logo">
+        <span class="logo-icon">✦</span>
+        <span class="logo-text">Animaxia</span>
+      </div>
+      <h2 class="auth-title" data-lang="ro">Setare parolă nouă</h2>
+      <h2 class="auth-title" data-lang="en" style="display:none;">Set New Password</h2>
+      <form id="resetForm" class="auth-form">
+        <div class="auth-field">
+          <label data-lang="ro">Parolă nouă</label>
+          <label data-lang="en" style="display:none;">New password</label>
+          <input type="password" id="resetPassword" placeholder="Minim 6 caractere" required>
+        </div>
+        <div class="auth-field">
+          <label data-lang="ro">Confirmă parola</label>
+          <label data-lang="en" style="display:none;">Confirm password</label>
+          <input type="password" id="resetConfirm" placeholder="Rescrie parola" required>
+        </div>
+        <p id="resetError" class="auth-error"></p>
+        <button type="submit" class="btn btn-primary auth-btn" data-lang="ro">Resetează parola</button>
+        <button type="submit" class="btn btn-primary auth-btn" data-lang="en" style="display:none;">Reset Password</button>
+        <p class="auth-switch"><a href="#" id="backToLogin2"><span data-lang="ro">Înapoi la autentificare</span><span data-lang="en" style="display:none;">Back to sign in</span></a></p>
+      </form>
+    </div>
+  </div>
+
+  <!-- Settings Screen -->
+  <div id="settings-screen" class="auth-screen" style="display:none;">
+    <div class="auth-container settings-container">
+      <div class="auth-logo">
+        <span class="logo-icon">✦</span>
+        <span class="logo-text">Animaxia</span>
+      </div>
+      <h2 class="auth-title" data-lang="ro">Setări Profil</h2>
+      <h2 class="auth-title" data-lang="en" style="display:none;">Profile Settings</h2>
+      <div class="settings-section">
+        <h3 data-lang="ro">Fotografie de profil</h3>
+        <h3 data-lang="en" style="display:none;">Profile Picture</h3>
+        <div class="avatar-upload">
+          <div class="avatar-preview" id="avatarPreview">
+            <span id="avatarInitials">A</span>
+            <div class="avatar-overlay"><i class="fas fa-camera"></i></div>
+          </div>
+          <input type="file" id="avatarInput" accept="image/*" style="display:none">
+          <p class="avatar-hint" data-lang="ro">Apasă pe avatar pentru a schimba poza</p>
+          <p class="avatar-hint" data-lang="en" style="display:none;">Click avatar to change picture</p>
+        </div>
+      </div>
+      <div class="settings-section">
+        <h3 data-lang="ro">Informații cont</h3>
+        <h3 data-lang="en" style="display:none;">Account Info</h3>
+        <div class="settings-field"><label data-lang="ro">Nume</label><p class="settings-value" id="settingsName">-</p></div>
+        <div class="settings-field"><label>Email</label><p class="settings-value" id="settingsEmail">-</p></div>
+        <div class="settings-field"><label data-lang="ro">Plan</label><p class="settings-value" id="settingsPlan">-</p></div>
+        <div class="settings-field"><label data-lang="ro">Email verificat</label><label data-lang="en" style="display:none;">Email verified</label><p class="settings-value" id="settingsVerified">-</p></div>
+      </div>
+      <div class="settings-section">
+        <h3 data-lang="ro">Limba</h3>
+        <h3 data-lang="en" style="display:none;">Language</h3>
+        <div class="lang-selector" id="settingsLangSelector">
+          <button class="lang-option active" data-lang="ro">🇷🇴 Română</button>
+          <button class="lang-option" data-lang="en">🇬🇧 English</button>
+        </div>
+        <div class="settings-field" style="margin-top:12px;">
+          <label data-lang="ro">Subtitrări</label>
+          <label data-lang="en" style="display:none;">Subtitles</label>
+          <select id="settingsSubtitles" style="background:var(--bg-tertiary);color:var(--text-primary);border:1px solid rgba(255,255,255,0.1);padding:8px 12px;border-radius:var(--radius-sm);width:100%;">
+            <option value="ro">🇷🇴 Română</option>
+            <option value="en">🇬🇧 English</option>
+            <option value="none" data-lang="ro">Fără subtitrări</option>
+            <option value="none" data-lang="en" style="display:none;">No subtitles</option>
+          </select>
+        </div>
+      </div>
+      <div class="settings-section">
+        <h3 data-lang="ro">Schimbă parola</h3>
+        <h3 data-lang="en" style="display:none;">Change Password</h3>
+        <form id="changePasswordForm">
+          <div class="auth-field">
+            <label data-lang="ro">Parola actuală</label>
+            <label data-lang="en" style="display:none;">Current password</label>
+            <input type="password" id="changeCurrentPass" placeholder="••••••••" required>
+          </div>
+          <div class="auth-field">
+            <label data-lang="ro">Parolă nouă</label>
+            <label data-lang="en" style="display:none;">New password</label>
+            <input type="password" id="changeNewPass" placeholder="Minim 6 caractere" required>
+          </div>
+          <div class="auth-field">
+            <label data-lang="ro">Confirmă parola nouă</label>
+            <label data-lang="en" style="display:none;">Confirm new password</label>
+            <input type="password" id="changeConfirmPass" placeholder="Rescrie parola" required>
+          </div>
+          <p id="changePassError" class="auth-error"></p>
+          <p id="changePassSuccess" class="auth-success" style="display:none;"></p>
+          <button type="submit" class="btn btn-primary auth-btn" data-lang="ro">Schimbă parola</button>
+          <button type="submit" class="btn btn-primary auth-btn" data-lang="en" style="display:none;">Change Password</button>
+        </form>
+      </div>
+      <button class="btn btn-secondary" id="backToAppBtn" style="width:100%;justify-content:center;margin-top:12px;">
+        <i class="fas fa-arrow-left"></i> <span data-lang="ro">Înapoi la Animaxia</span><span data-lang="en" style="display:none;">Back to Animaxia</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Profile Selection Screen -->
+  <div id="profile-screen" class="profile-screen" style="display:none;">
+    <div class="profile-container">
+      <h1 class="profile-title" data-lang="ro">Cine ești tu?</h1>
+      <h1 class="profile-title" data-lang="en" style="display:none;">Who's watching?</h1>
+      <div class="profile-list"></div>
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+        <button class="profile-manage-btn" id="profileSettingsBtn"><i class="fas fa-cog"></i> <span data-lang="ro">Setări cont</span><span data-lang="en" style="display:none;">Account settings</span></button>
+        <button class="profile-manage-btn" id="profileLogoutBtn"><i class="fas fa-sign-out-alt"></i> <span data-lang="ro">Deconectare</span><span data-lang="en" style="display:none;">Sign out</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Kids PIN Screen -->
+  <div id="kids-pin-screen" class="auth-screen" style="display:none;">
+    <div class="auth-container" style="max-width:380px;">
+      <div class="auth-logo"><span class="logo-icon">👶</span><span class="logo-text" data-lang="ro">Animaxia Kids</span><span class="logo-text" data-lang="en" style="display:none;">Animaxia Kids</span></div>
+      <h2 class="auth-title" data-lang="ro">Cod PIN pentru copii</h2>
+      <h2 class="auth-title" data-lang="en" style="display:none;">Kids PIN Code</h2>
+      <p class="auth-subtitle" data-lang="ro">Introdu codul PIN pentru a accesa profilul de copii.</p>
+      <p class="auth-subtitle" data-lang="en" style="display:none;">Enter the PIN to access the kids profile.</p>
+      <div class="pin-input-container">
+        <div class="pin-dots" id="pinDots">
+          <span class="pin-dot"></span>
+          <span class="pin-dot"></span>
+          <span class="pin-dot"></span>
+          <span class="pin-dot"></span>
+        </div>
+        <div class="pin-numpad" id="pinNumpad">
+          <button class="pin-btn" data-value="1">1</button>
+          <button class="pin-btn" data-value="2">2</button>
+          <button class="pin-btn" data-value="3">3</button>
+          <button class="pin-btn" data-value="4">4</button>
+          <button class="pin-btn" data-value="5">5</button>
+          <button class="pin-btn" data-value="6">6</button>
+          <button class="pin-btn" data-value="7">7</button>
+          <button class="pin-btn" data-value="8">8</button>
+          <button class="pin-btn" data-value="9">9</button>
+          <button class="pin-btn pin-btn-clear" data-value="clear">⌫</button>
+          <button class="pin-btn" data-value="0">0</button>
+          <button class="pin-btn pin-btn-submit" data-value="submit">✓</button>
+        </div>
+        <p id="pinError" class="auth-error"></p>
+        <button class="btn btn-secondary" id="pinBackBtn" style="width:100%;justify-content:center;margin-top:16px;">
+          <i class="fas fa-arrow-left"></i> <span data-lang="ro">Înapoi la profiluri</span><span data-lang="en" style="display:none;">Back to profiles</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- My List Page -->
+  <div id="my-list-screen" class="full-page-screen" style="display:none;">
+    <div class="full-page-header">
+      <div class="full-page-header-content">
+        <button class="full-page-back" id="myListBack"><i class="fas fa-arrow-left"></i></button>
+        <h1 data-lang="ro">Lista Mea</h1>
+        <h1 data-lang="en" style="display:none;">My List</h1>
+      </div>
+    </div>
+    <div class="full-page-body">
+      <div class="my-list-filters" id="myListFilters">
+        <div class="my-list-filter-group">
+          <select id="myListGenreFilter">
+            <option value="" data-lang="ro">Toate genurile</option>
+            <option value="" data-lang="en" style="display:none;">All genres</option>
+            <option value="Animatie">Animație</option>
+            <option value="Actiune">Acțiune</option>
+            <option value="Drama">Dramă</option>
+            <option value="Comedie">Comedie</option>
+            <option value="Documentar">Documentar</option>
+          </select>
+          <select id="myListTypeFilter">
+            <option value="" data-lang="ro">Toate tipurile</option>
+            <option value="" data-lang="en" style="display:none;">All types</option>
+            <option value="movie" data-lang="ro">Filme</option>
+            <option value="movie" data-lang="en" style="display:none;">Movies</option>
+            <option value="series" data-lang="ro">Seriale</option>
+            <option value="series" data-lang="en" style="display:none;">Series</option>
+          </select>
+          <select id="myListSortFilter">
+            <option value="added" data-lang="ro">Adăugat recent</option>
+            <option value="added" data-lang="en" style="display:none;">Recently added</option>
+            <option value="title" data-lang="ro">Alfabetic A-Z</option>
+            <option value="title" data-lang="en" style="display:none;">Alphabetical A-Z</option>
+            <option value="year" data-lang="ro">An (mai nou)</option>
+            <option value="year" data-lang="en" style="display:none;">Year (newest)</option>
+          </select>
+        </div>
+        <div class="my-list-count" id="myListCount"></div>
+      </div>
+      <div class="my-list-grid" id="myListGrid"></div>
+    </div>
+  </div>
+
+  <!-- Notifications Center -->
+  <div id="notifications-screen" class="full-page-screen" style="display:none;">
+    <div class="full-page-header">
+      <div class="full-page-header-content">
+        <button class="full-page-back" id="notifBack"><i class="fas fa-arrow-left"></i></button>
+        <h1 data-lang="ro">Notificări</h1>
+        <h1 data-lang="en" style="display:none;">Notifications</h1>
+        <button class="btn btn-secondary" id="notifReadAll" style="padding:6px 14px;font-size:13px;margin-left:auto;">
+          <i class="fas fa-check-double"></i> <span data-lang="ro">Marchează tot</span><span data-lang="en" style="display:none;">Mark all read</span>
+        </button>
+      </div>
+    </div>
+    <div class="full-page-body">
+      <div class="notifications-list" id="notificationsList"></div>
+    </div>
+  </div>
+
+  <!-- Advanced Search Page -->
+  <div id="search-page-screen" class="full-page-screen" style="display:none;">
+    <div class="full-page-header">
+      <div class="full-page-header-content">
+        <button class="full-page-back" id="searchPageBack"><i class="fas fa-arrow-left"></i></button>
+        <div class="search-page-input">
+          <i class="fas fa-search"></i>
+          <input type="text" id="searchPageInput" placeholder="Caută titluri, persoane, genuri..." autofocus>
+        </div>
+      </div>
+    </div>
+    <div class="full-page-body">
+      <div class="search-filters" id="searchFilters">
+        <div class="search-filter-group">
+          <select id="sfGenre">
+            <option value="" data-lang="ro">Gen: Toate</option>
+            <option value="" data-lang="en" style="display:none;">Genre: All</option>
+            <option value="Animatie">Animație</option>
+            <option value="Actiune">Acțiune</option>
+            <option value="Aventura">Aventură</option>
+            <option value="Comedie">Comedie</option>
+            <option value="Documentar">Documentar</option>
+            <option value="Drama">Dramă</option>
+            <option value="Familie">Familie</option>
+            <option value="Fantasy">Fantasy</option>
+            <option value="SF">SF</option>
+            <option value="Thriller">Thriller</option>
+          </select>
+          <select id="sfType">
+            <option value="" data-lang="ro">Tip: Toate</option>
+            <option value="" data-lang="en" style="display:none;">Type: All</option>
+            <option value="movie" data-lang="ro">Filme</option>
+            <option value="movie" data-lang="en" style="display:none;">Movies</option>
+            <option value="series" data-lang="ro">Seriale</option>
+            <option value="series" data-lang="en" style="display:none;">Series</option>
+          </select>
+          <select id="sfYearFrom">
+            <option value="">An de la:</option>
+            <option value="2020">2020</option>
+            <option value="2021">2021</option>
+            <option value="2022">2022</option>
+            <option value="2023">2023</option>
+            <option value="2024">2024</option>
+            <option value="2025">2025</option>
+          </select>
+          <select id="sfSort">
+            <option value="relevance" data-lang="ro">Relevanță</option>
+            <option value="relevance" data-lang="en" style="display:none;">Relevance</option>
+            <option value="title" data-lang="ro">Alfabetic</option>
+            <option value="title" data-lang="en" style="display:none;">Alphabetical</option>
+            <option value="year_desc" data-lang="ro">An (mai nou)</option>
+            <option value="year_desc" data-lang="en" style="display:none;">Year (newest)</option>
+            <option value="match" data-lang="ro">Potrivire</option>
+            <option value="match" data-lang="en" style="display:none;">Match</option>
+          </select>
+          <button class="btn btn-primary" id="sfSearchBtn" style="padding:8px 16px;"><i class="fas fa-search"></i></button>
+        </div>
+      </div>
+      <div class="search-stats" id="searchStats"></div>
+      <div class="my-list-grid" id="searchPageResults"></div>
+    </div>
+  </div>
+
+  <!-- ====== WATCH HISTORY PAGE (NEW) ====== -->
+  <div id="watch-history-screen" class="full-page-screen" style="display:none;">
+    <div class="full-page-header">
+      <div class="full-page-header-content">
+        <button class="full-page-back" id="whBack"><i class="fas fa-arrow-left"></i></button>
+        <h1 data-lang="ro">Istoric Vizionări</h1>
+        <h1 data-lang="en" style="display:none;">Watch History</h1>
+        <div style="margin-left:auto;display:flex;gap:8px;">
+          <button class="btn btn-secondary" id="whRefresh" style="padding:6px 14px;font-size:13px;"><i class="fas fa-sync-alt"></i></button>
+          <button class="btn btn-secondary" id="whClear" style="padding:6px 14px;font-size:13px;color:var(--red);"><i class="fas fa-trash"></i> <span data-lang="ro">Șterge tot</span><span data-lang="en" style="display:none;">Clear all</span></button>
+        </div>
+      </div>
+    </div>
+    <div class="full-page-body">
+      <div class="watch-history-stats" id="whStats"></div>
+      <div class="watch-history-list" id="whList"></div>
+      <div class="watch-history-pagination" id="whPagination"></div>
+    </div>
+  </div>
+
+  <!-- ====== DOWNLOADS PAGE (NEW) ====== -->
+  <div id="downloads-screen" class="full-page-screen" style="display:none;">
+    <div class="full-page-header">
+      <div class="full-page-header-content">
+        <button class="full-page-back" id="dlBack"><i class="fas fa-arrow-left"></i></button>
+        <h1 data-lang="ro">Descărcări</h1>
+        <h1 data-lang="en" style="display:none;">Downloads</h1>
+      </div>
+    </div>
+    <div class="full-page-body">
+      <div class="downloads-stats" id="dlStats"></div>
+      <div class="downloads-grid" id="dlGrid"></div>
+    </div>
+  </div>
+
+  <!-- ====== ADMIN DASHBOARD (NEW) ====== -->
+  <div id="admin-screen" class="full-page-screen" style="display:none;">
+    <div class="full-page-header">
+      <div class="full-page-header-content">
+        <button class="full-page-back" id="adminBack"><i class="fas fa-arrow-left"></i></button>
+        <h1>📊 Admin Dashboard</h1>
+        <div style="margin-left:auto;display:flex;gap:8px;">
+          <button class="btn btn-secondary admin-tab-btn active" data-tab="stats" style="padding:6px 14px;font-size:13px;">Stats</button>
+          <button class="btn btn-secondary admin-tab-btn" data-tab="content" style="padding:6px 14px;font-size:13px;">Content</button>
+          <button class="btn btn-secondary admin-tab-btn" data-tab="users" style="padding:6px 14px;font-size:13px;">Users</button>
+          <button class="btn btn-secondary admin-tab-btn" data-tab="analytics" style="padding:6px 14px;font-size:13px;">Analytics</button>
+          <button class="btn btn-secondary admin-tab-btn" data-tab="logs" style="padding:6px 14px;font-size:13px;">Logs</button>
+        </div>
+      </div>
+    </div>
+    <div class="full-page-body admin-body">
+      <!-- Stats Overview -->
+      <div class="admin-tab active" id="adminTabStats">
+        <div class="admin-stats-grid" id="adminStatsGrid"></div>
+        <div class="admin-section" style="margin-top:24px;">
+          <h3>Quick Actions</h3>
+          <div style="display:flex;gap:12px;margin-top:12px;flex-wrap:wrap;">
+            <button class="btn btn-primary" onclick="App.adminRefresh()"><i class="fas fa-sync-alt"></i> Refresh Stats</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Content Management -->
+      <div class="admin-tab" id="adminTabContent" style="display:none;">
+        <div class="admin-toolbar">
+          <input type="text" id="adminContentSearch" placeholder="Search content..." style="max-width:300px;">
+          <button class="btn btn-primary" id="adminAddContentBtn"><i class="fas fa-plus"></i> Add Content</button>
+        </div>
+        <div class="admin-table" id="adminContentTable"></div>
+        <!-- Add/Edit Content Modal -->
+        <div class="admin-modal-overlay" id="adminContentModal" style="display:none;">
+          <div class="admin-modal">
+            <h3 id="adminContentModalTitle">Add Content</h3>
+            <div class="admin-modal-grid">
+              <div class="admin-field"><label>ID</label><input id="acId" placeholder="e.g. film123"></div>
+              <div class="admin-field"><label>Title (RO)</label><input id="acTitle" placeholder="Titlu română"></div>
+              <div class="admin-field"><label>Title (EN)</label><input id="acTitleEn" placeholder="English title"></div>
+              <div class="admin-field"><label>Year</label><input id="acYear" placeholder="2025"></div>
+              <div class="admin-field"><label>Duration</label><input id="acDuration" placeholder="2h 15min"></div>
+              <div class="admin-field"><label>Rating</label><input id="acRating" placeholder="PG-13"></div>
+              <div class="admin-field"><label>Type</label>
+                <select id="acType"><option value="movie">Movie</option><option value="series">Series</option></select>
+              </div>
+              <div class="admin-field"><label>Genre (comma)</label><input id="acGenre" placeholder="Actiune, Aventura"></div>
+              <div class="admin-field"><label>Match Rating</label><input id="acMatch" placeholder="95%"></div>
+              <div class="admin-field"><label>BG Color</label><input id="acBgColor" placeholder="#1e1e2e" type="color"></div>
+            </div>
+            <div class="admin-field" style="grid-column:1/-1;"><label>Description (RO)</label><textarea id="acDescription" rows="2"></textarea></div>
+            <div class="admin-field" style="grid-column:1/-1;"><label>Description (EN)</label><textarea id="acDescriptionEn" rows="2"></textarea></div>
+            <div class="admin-modal-actions">
+              <button class="btn btn-primary" id="acSaveBtn">Save</button>
+              <button class="btn btn-secondary" id="acCancelBtn">Cancel</button>
+            </div>
+            <p id="acError" class="auth-error"></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Users Management -->
+      <div class="admin-tab" id="adminTabUsers" style="display:none;">
+        <div class="admin-table" id="adminUsersTable"></div>
+      </div>
+
+      <!-- Analytics -->
+      <div class="admin-tab" id="adminTabAnalytics" style="display:none;">
+        <div class="admin-analytics-grid" id="adminAnalyticsGrid"></div>
+      </div>
+
+      <!-- Logs -->
+      <div class="admin-tab" id="adminTabLogs" style="display:none;">
+        <div class="admin-table" id="adminLogsTable"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main App -->
+  <div id="app" class="app" style="display:none;">
+    <header id="header" class="header">
+      <div class="header-container">
+        <div class="header-left">
+          <button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle menu"><i class="fas fa-bars"></i></button>
+          <a href="#" class="logo"><span class="logo-icon">✦</span><span class="logo-text">Animaxia</span></a>
+          <nav class="main-nav">
+            <ul class="nav-list">
+              <li class="nav-item active"><a href="#" data-section="home"><i class="fas fa-home"></i><span data-lang="ro">Acasă</span><span data-lang="en" style="display:none;">Home</span></a></li>
+              <li class="nav-item"><a href="#" data-section="trending"><i class="fas fa-fire"></i><span data-lang="ro">Tendințe</span><span data-lang="en" style="display:none;">Trending</span></a></li>
+              <li class="nav-item"><a href="#" data-section="movies"><i class="fas fa-film"></i><span data-lang="ro">Filme</span><span data-lang="en" style="display:none;">Movies</span></a></li>
+              <li class="nav-item"><a href="#" data-section="series"><i class="fas fa-tv"></i><span data-lang="ro">Seriale</span><span data-lang="en" style="display:none;">Series</span></a></li>
+              <li class="nav-item"><a href="#" data-section="my-list"><i class="fas fa-bookmark"></i><span data-lang="ro">Lista Mea</span><span data-lang="en" style="display:none;">My List</span></a></li>
+              <li class="nav-item"><a href="#" data-section="live"><i class="fas fa-broadcast-tower"></i><span data-lang="ro">Live TV</span><span data-lang="en" style="display:none;">Live TV</span></a></li>
+            </ul>
+          </nav>
+        </div>
+        <div class="header-right">
+          <button class="header-lang-btn" id="headerLangBtn" title="Change language">🇷🇴</button>
+          <div class="search-container">
+            <button class="search-toggle" id="searchToggle" aria-label="Search"><i class="fas fa-search"></i></button>
+          </div>
+          <button class="notification-btn" id="notifBtn" aria-label="Notifications">
+            <i class="fas fa-bell"></i>
+            <span class="notification-badge" id="notifBadge">0</span>
+          </button>
+          <div class="user-menu" id="userMenu">
+            <div class="user-avatar" style="background:#e17055"><span>A</span><i class="fas fa-chevron-down"></i></div>
+            <div class="user-dropdown" id="userDropdown">
+              <div class="dropdown-header">
+                <div class="user-avatar-sm" style="background:#e17055">A</div>
+                <div><strong id="dropdownUserName">Utilizator</strong><span id="dropdownUserPlan">Plan</span></div>
+              </div>
+              <div class="dropdown-divider"></div>
+              <a href="#" class="dropdown-item" data-action="profile"><i class="fas fa-user"></i> <span data-lang="ro">Profilul meu</span><span data-lang="en" style="display:none;">My Profile</span></a>
+              <a href="#" class="dropdown-item" data-action="profiles"><i class="fas fa-users"></i> <span data-lang="ro">Gestionează Profiluri</span><span data-lang="en" style="display:none;">Manage Profiles</span></a>
+              <a href="#" class="dropdown-item" data-action="watch-history"><i class="fas fa-history"></i> <span data-lang="ro">Istoric Vizionări</span><span data-lang="en" style="display:none;">Watch History</span></a>
+              <a href="#" class="dropdown-item" data-action="downloads"><i class="fas fa-download"></i> <span data-lang="ro">Descărcări</span><span data-lang="en" style="display:none;">Downloads</span></a>
+              <a href="#" class="dropdown-item" data-action="settings"><i class="fas fa-cog"></i> <span data-lang="ro">Setări</span><span data-lang="en" style="display:none;">Settings</span></a>
+              <a href="#" class="dropdown-item" data-action="notifications"><i class="fas fa-bell"></i> <span data-lang="ro">Notificări</span><span data-lang="en" style="display:none;">Notifications</span></a>
+              <a href="#" class="dropdown-item" data-action="my-list-dropdown"><i class="fas fa-bookmark"></i> <span data-lang="ro">Lista Mea</span><span data-lang="en" style="display:none;">My List</span></a>
+              <a href="#" class="dropdown-item admin-link" data-action="admin" style="display:none;"><i class="fas fa-shield-alt"></i> Admin Dashboard</a>
+              <a href="#" class="dropdown-item" data-action="billing"><i class="fas fa-credit-card"></i> <span data-lang="ro">Abonament</span><span data-lang="en" style="display:none;">Subscription</span></a>
+              <div class="dropdown-divider"></div>
+              <a href="#" class="dropdown-item" data-action="logout"><i class="fas fa-sign-out-alt"></i> <span data-lang="ro">Deconectare</span><span data-lang="en" style="display:none;">Sign out</span></a>
+            </div>
+          </div>
+        </div>
+      </div>
+      <nav class="mobile-nav">
+        <a href="#" class="mobile-nav-item active" data-section="home"><i class="fas fa-home"></i><span data-lang="ro">Acasă</span><span data-lang="en" style="display:none;">Home</span></a>
+        <a href="#" class="mobile-nav-item" data-section="trending"><i class="fas fa-fire"></i><span data-lang="ro">Tendințe</span><span data-lang="en" style="display:none;">Trending</span></a>
+        <a href="#" class="mobile-nav-item" data-section="movies"><i class="fas fa-film"></i><span data-lang="ro">Filme</span><span data-lang="en" style="display:none;">Movies</span></a>
+        <a href="#" class="mobile-nav-item" data-section="series"><i class="fas fa-tv"></i><span data-lang="ro">Seriale</span><span data-lang="en" style="display:none;">Series</span></a>
+        <a href="#" class="mobile-nav-item" data-section="my-list"><i class="fas fa-bookmark"></i><span data-lang="ro">Lista</span><span data-lang="en" style="display:none;">List</span></a>
+      </nav>
+    </header>
+
+    <!-- ====== SIDEBAR OVERLAY ====== -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- ====== SIDEBAR NAVIGATION ====== -->
+    <nav class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <span class="logo-icon">✦</span>
+        <span class="logo-text">Animaxia</span>
+        <button class="sidebar-close" id="sidebarClose"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="sidebar-scroll">
+        <div class="sidebar-user">
+          <div class="sidebar-avatar" id="sidebarAvatar" style="background:#6c5ce7">A</div>
+          <div class="sidebar-user-info">
+            <strong id="sidebarUserName">Utilizator</strong>
+            <span id="sidebarUserPlan">Plan Free</span>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-label">Navigare</div>
+          <a href="#" class="sidebar-item active" data-section="home"><i class="fas fa-home"></i><span data-lang="ro">Acasă</span><span data-lang="en" style="display:none;">Home</span></a>
+          <a href="#" class="sidebar-item" data-section="trending"><i class="fas fa-fire"></i><span data-lang="ro">Tendințe</span><span data-lang="en" style="display:none;">Trending</span></a>
+          <a href="#" class="sidebar-item" data-section="movies"><i class="fas fa-film"></i><span data-lang="ro">Filme</span><span data-lang="en" style="display:none;">Movies</span></a>
+          <a href="#" class="sidebar-item" data-section="series"><i class="fas fa-tv"></i><span data-lang="ro">Seriale</span><span data-lang="en" style="display:none;">Series</span></a>
+          <a href="#" class="sidebar-item" data-section="my-list"><i class="fas fa-bookmark"></i><span data-lang="ro">Lista Mea</span><span data-lang="en" style="display:none;">My List</span></a>
+          <a href="#" class="sidebar-item" data-section="live"><i class="fas fa-broadcast-tower"></i><span data-lang="ro">Live TV</span><span data-lang="en" style="display:none;">Live TV</span></a>
+        </div>
+
+        <div class="sidebar-divider"></div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-label">Platformă</div>
+          <a href="#" class="sidebar-item" data-section="upload"><i class="fas fa-upload"></i><span>Upload</span></a>
+          <a href="#" class="sidebar-item" data-section="industry"><i class="fas fa-building"></i><span>Industry</span></a>
+          <a href="#" class="sidebar-item" data-section="franchises"><i class="fas fa-star"></i><span>Francize</span></a>
+          <a href="#" class="sidebar-item" data-section="content"><i class="fas fa-photo-video"></i><span>Content</span></a>
+          <a href="#" class="sidebar-item" data-section="discover"><i class="fas fa-compass"></i><span>Discover</span></a>
+          <a href="#" class="sidebar-item" data-section="addon"><i class="fas fa-puzzle-piece"></i><span>Add-on</span></a>
+          <a href="#" class="sidebar-item" data-section="addon-marketplace"><i class="fas fa-store"></i><span>Add-on Marketplace</span></a>
+          <a href="#" class="sidebar-item" data-section="continent"><i class="fas fa-globe"></i><span>Continent</span></a>
+        </div>
+
+        <div class="sidebar-divider"></div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-label">Utilizator</div>
+          <a href="#" class="sidebar-item" data-section="watch-history"><i class="fas fa-history"></i><span data-lang="ro">Istoric</span><span data-lang="en" style="display:none;">History</span></a>
+          <a href="#" class="sidebar-item" data-section="downloads"><i class="fas fa-download"></i><span data-lang="ro">Descărcări</span><span data-lang="en" style="display:none;">Downloads</span></a>
+          <a href="#" class="sidebar-item" data-section="settings"><i class="fas fa-cog"></i><span data-lang="ro">Setări</span><span data-lang="en" style="display:none;">Settings</span></a>
+          <a href="#" class="sidebar-item" data-section="notifications"><i class="fas fa-bell"></i><span data-lang="ro">Notificări</span><span data-lang="en" style="display:none;">Notifications</span></a>
+          <a href="#" class="sidebar-item admin-link" data-section="admin" style="display:none;"><i class="fas fa-shield-alt"></i> Admin</a>
+        </div>
+
+        <div class="sidebar-divider"></div>
+
+        <div class="sidebar-section">
+          <a href="#" class="sidebar-item" id="sidebarLogout"><i class="fas fa-sign-out-alt"></i><span data-lang="ro">Deconectare</span><span data-lang="en" style="display:none;">Sign Out</span></a>
+        </div>
+      </div>
+    </nav>
+
+    <main class="main-content" id="mainContent">
+      <!-- Verify Banner -->
+      <div id="verifyBanner" class="verify-banner" style="display:none;">
+        <i class="fas fa-envelope"></i>
+        <span data-lang="ro">Confirmă adresa de email pentru a activa toate funcțiile. <a href="#" id="resendVerifyLink">Retrimite email</a></span>
+        <span data-lang="en" style="display:none;">Verify your email to activate all features. <a href="#" id="resendVerifyLinkEn">Resend email</a></span>
+        <button id="closeVerifyBanner"><i class="fas fa-times"></i></button>
+      </div>
+
+      <!-- Hero -->
+      <section class="hero" id="heroSection">
+        <div class="hero-backdrop" id="heroBackdrop"></div>
+        <div class="hero-overlay"></div>
+        <div class="hero-gradient"></div>
+        <div class="hero-content">
+          <div class="hero-badge" id="heroBadge">Original Animaxia</div>
+          <h1 class="hero-title" id="heroTitle">Legendele Animaxiei</h1>
+          <div class="hero-meta">
+            <span class="hero-year" id="heroYearDisplay">2025</span>
+            <span class="hero-separator">•</span>
+            <span class="hero-duration" id="heroDurationDisplay">2h 15min</span>
+            <span class="hero-separator">•</span>
+            <span class="hero-rating" id="heroRatingDisplay">PG-13</span>
+            <span class="hero-separator">•</span>
+            <span class="hero-match" id="heroMatchDisplay"><i class="fas fa-thumbs-up"></i> 98% potrivire</span>
+          </div>
+          <div class="hero-genres" id="heroGenres"></div>
+          <p class="hero-description" id="heroDescription"></p>
+          <div class="hero-actions">
+            <button class="btn btn-primary btn-play" id="heroPlayBtn"><i class="fas fa-play"></i> <span data-lang="ro">Rulează acum</span><span data-lang="en" style="display:none;">Play now</span></button>
+            <button class="btn btn-secondary btn-info" id="heroInfoBtn"><i class="fas fa-info-circle"></i> <span data-lang="ro">Mai multe detalii</span><span data-lang="en" style="display:none;">More info</span></button>
+            <button class="btn btn-secondary" id="heroShuffleBtn" title="Shuffle play" style="width:40px;height:40px;border-radius:50%;justify-content:center;padding:0;"><i class="fas fa-random"></i></button>
+            <button class="btn btn-icon btn-add-list" id="heroAddListBtn" title="Add to my list"><i class="fas fa-plus"></i></button>
+          </div>
+        </div>
+        <div class="hero-nav">
+          <button class="hero-nav-btn" id="heroPrev"><i class="fas fa-chevron-left"></i></button>
+          <div class="hero-dots" id="heroDots"></div>
+          <button class="hero-nav-btn" id="heroNext"><i class="fas fa-chevron-right"></i></button>
+        </div>
+      </section>
+
+      <!-- Genre Filter -->
+      <div class="genre-bar" id="genreBar">
+        <button class="genre-filter-item active" data-genre="all" data-lang="ro">Toate</button>
+        <button class="genre-filter-item active" data-genre="all" data-lang="en" style="display:none;">All</button>
+        <button class="genre-filter-item" data-genre="actiune">Acțiune</button>
+        <button class="genre-filter-item" data-genre="animatie">Animație</button>
+        <button class="genre-filter-item" data-genre="comedie">Comedie</button>
+        <button class="genre-filter-item" data-genre="documentar">Documentar</button>
+        <button class="genre-filter-item" data-genre="familie">Familie</button>
+        <button class="genre-filter-item" data-genre="sf">SF</button>
+        <button class="genre-filter-item" data-genre="kids">Kids</button>
+        <button class="genre-filter-item" data-genre="educational">Educațional</button>
+      </div>
+
+      <div class="content-wrapper">
+        <!-- Recommendations Section (NEW) -->
+        <section class="content-section" id="recommendationsSection" style="display:none;">
+          <div class="section-header">
+            <h2 class="section-title" id="recTitle"><i class="fas fa-magic"></i> <span data-lang="ro">Recomandări pentru tine</span><span data-lang="en" style="display:none;">Recommended for you</span></h2>
+            <a href="#" class="section-link refresh-link" id="recRefresh"><i class="fas fa-sync-alt"></i></a>
+          </div>
+          <div class="content-row" id="recommendationsRow"></div>
+        </section>
+
+        <section class="content-section" id="continueWatching">
+          <div class="section-header">
+            <h2 class="section-title" data-lang="ro">Continuă vizionarea</h2>
+            <h2 class="section-title" data-lang="en" style="display:none;">Continue Watching</h2>
+            <a href="#" class="section-link" data-lang="ro">Vezi tot</a>
+            <a href="#" class="section-link" data-lang="en" style="display:none;">See all</a>
+          </div>
+          <div class="content-row continue-row" id="continueWatchingRow"></div>
+        </section>
+
+        <section class="content-section" id="liveStrip">
+          <div class="section-header">
+            <h2 class="section-title"><i class="fas fa-broadcast-tower live-icon"></i> <span data-lang="ro">Live TV</span><span data-lang="en" style="display:none;">Live TV</span></h2>
+            <a href="#" class="section-link" data-lang="ro">Vezi ghidul TV</a>
+            <a href="#" class="section-link" data-lang="en" style="display:none;">TV Guide</a>
+          </div>
+          <div class="live-strip" id="liveStripContainer"></div>
+        </section>
+
+        <div id="contentRows"></div>
+      </div>
+
+      <footer class="footer">
+        <div class="footer-content">
+          <div class="footer-brand">
+            <div class="footer-logo"><span class="logo-icon">✦</span><span class="logo-text">Animaxia</span></div>
+            <p class="footer-desc" data-lang="ro">Platforma ta de streaming premium.</p>
+            <p class="footer-desc" data-lang="en" style="display:none;">Your premium streaming platform.</p>
+            <div class="footer-social">
+              <a href="#" aria-label="Facebook"><i class="fab fa-facebook"></i></a>
+              <a href="#" aria-label="Instagram"><i class="fab fa-instagram"></i></a>
+              <a href="#" aria-label="Twitter"><i class="fab fa-twitter"></i></a>
+              <a href="#" aria-label="YouTube"><i class="fab fa-youtube"></i></a>
+            </div>
+          </div>
+          <div class="footer-links">
+            <div class="footer-col">
+              <h4 data-lang="ro">Navigare</h4>
+              <h4 data-lang="en" style="display:none;">Navigate</h4>
+              <a href="#" data-lang="ro">Acasă</a><a href="#" data-lang="ro">Filme</a><a href="#" data-lang="ro">Seriale</a>
+              <a href="#" data-lang="en" style="display:none;">Home</a><a href="#" data-lang="en" style="display:none;">Movies</a><a href="#" data-lang="en" style="display:none;">Series</a>
+            </div>
+            <div class="footer-col">
+              <h4 data-lang="ro">Legal</h4>
+              <h4 data-lang="en" style="display:none;">Legal</h4>
+              <a href="#" data-lang="ro">Termeni</a><a href="#" data-lang="ro">Confidențialitate</a>
+              <a href="#" data-lang="en" style="display:none;">Terms</a><a href="#" data-lang="en" style="display:none;">Privacy</a>
+            </div>
+          </div>
+          <div class="footer-bottom">
+            <p>&copy; 2025 Animaxia.</p>
+            <div class="footer-flags"><span class="lang-flag" data-lang="ro">🇷🇴</span><span class="lang-flag" data-lang="en">🇬🇧</span></div>
+          </div>
+        </div>
+      </footer>
+    </main>
+
+    <!-- Detail Modal (with Reviews) -->
+    <div class="modal" id="detailModal">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <button class="modal-close"><i class="fas fa-times"></i></button>
+        <div class="modal-hero">
+          <div class="modal-hero-bg" id="modalHeroBg"></div>
+          <div class="modal-hero-content">
+            <h2 class="modal-title" id="modalTitle"></h2>
+            <div class="modal-meta" id="modalMeta"></div>
+            <div class="modal-genres" id="modalGenres"></div>
+            <div class="modal-actions" id="modalActions">
+              <button class="btn btn-primary btn-play" onclick="App.openPlayer(App.currentDetailId)"><i class="fas fa-play"></i> <span data-lang="ro">Rulează</span><span data-lang="en" style="display:none;">Play</span></button>
+              <button class="btn btn-secondary" onclick="App.toggleWatchlist(App.currentDetailId)"><i class="fas fa-plus"></i> <span data-lang="ro">Salvează</span><span data-lang="en" style="display:none;">Save</span></button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-body">
+          <div class="modal-info">
+            <div class="modal-description" id="modalDescription"></div>
+            <div class="modal-details-grid">
+              <div class="detail-item"><span class="detail-label" data-lang="ro">Distribuție</span><span class="detail-label" data-lang="en" style="display:none;">Cast</span><span class="detail-value" id="modalCast"></span></div>
+              <div class="detail-item"><span class="detail-label">Rating</span><span class="detail-value" id="modalRating"></span></div>
+              <div class="detail-item"><span class="detail-label" data-lang="ro">Durată</span><span class="detail-label" data-lang="en" style="display:none;">Duration</span><span class="detail-value" id="modalDuration"></span></div>
+              <div class="detail-item"><span class="detail-label">An</span><span class="detail-value" id="modalYear"></span></div>
+            </div>
+          </div>
+          <!-- Reviews Section -->
+          <div class="modal-reviews" id="modalReviews">
+            <h3><i class="fas fa-star" style="color:var(--yellow);"></i> <span data-lang="ro">Recenzii</span><span data-lang="en" style="display:none;">Reviews</span> <span class="review-stats" id="reviewStats"></span></h3>
+            <div class="review-form" id="reviewForm">
+              <div class="review-stars" id="reviewStars">
+                <span class="star" data-val="1">★</span>
+                <span class="star" data-val="2">★</span>
+                <span class="star" data-val="3">★</span>
+                <span class="star" data-val="4">★</span>
+                <span class="star" data-val="5">★</span>
+              </div>
+              <textarea id="reviewComment" placeholder="Scrie un comentariu..." rows="2"></textarea>
+              <button class="btn btn-primary" id="reviewSubmitBtn" style="padding:6px 16px;font-size:13px;"><i class="fas fa-paper-plane"></i> <span data-lang="ro">Trimite</span><span data-lang="en" style="display:none;">Submit</span></button>
+            </div>
+            <div class="review-list" id="reviewList"></div>
+          </div>
+          <div class="modal-similar">
+            <h3 data-lang="ro">Te-ar putea interesa</h3>
+            <h3 data-lang="en" style="display:none;">You might also like</h3>
+            <div class="similar-grid" id="similarGrid"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Search Overlay -->
+    <div class="search-overlay" id="searchOverlay">
+      <div class="search-overlay-header">
+        <i class="fas fa-search"></i>
+        <input type="text" id="searchOverlayInput" placeholder="Caută titluri, persoane, genuri..." autofocus>
+        <button class="search-overlay-close" id="searchOverlayClose"><i class="fas fa-times"></i></button>
+        <button class="search-overlay-advanced" id="searchAdvancedBtn"><i class="fas fa-sliders-h"></i></button>
+      </div>
+      <div class="search-overlay-results">
+        <div class="search-hints">
+          <p class="search-hint-title"><i class="fas fa-lightbulb"></i> <span data-lang="ro">Sugestii de căutare:</span><span data-lang="en" style="display:none;">Search suggestions:</span></p>
+          <div class="search-tags" id="searchTags">
+            <span class="search-tag">Acțiune</span><span class="search-tag">Animație</span>
+            <span class="search-tag">SF</span><span class="search-tag">Documentar</span>
+            <span class="search-tag">Comedie</span><span class="search-tag">Premium</span>
+          </div>
+        </div>
+        <div class="search-results-grid" id="searchResultsGrid"></div>
+      </div>
+    </div>
+
+    <!-- Player Modal -->
+    <div class="player-modal" id="playerModal">
+      <div class="player-container">
+        <div class="player-header">
+          <h3 class="player-title" id="playerTitle"></h3>
+          <div class="player-header-right">
+            <button class="player-btn" id="playerEpisodesBtn" title="Episodes"><i class="fas fa-list"></i></button>
+            <button class="player-btn" id="playerSubtitlesBtn" title="Subtitles"><i class="fas fa-closed-captioning"></i></button>
+            <button class="player-close" id="playerCloseBtn"><i class="fas fa-times"></i></button>
+          </div>
+        </div>
+        <div class="player-screen" id="playerScreen">
+          <!-- X-Ray Overlay Panel -->
+          <div class="xray-panel" id="xrayPanel">
+            <div class="xray-header">
+              <h4><i class="fas fa-info-circle"></i> X-Ray <span class="xray-badge">Premium</span></h4>
+              <button class="xray-close" onclick="App.toggleXRay()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="xray-content">
+              <div class="xray-section">
+                <h5><i class="fas fa-users"></i> <span data-lang="ro">Distribuție</span><span data-lang="en" style="display:none;">Cast</span></h5>
+                <div class="xray-cast" id="xrayCast"></div>
+              </div>
+              <div class="xray-section">
+                <h5><i class="fas fa-lightbulb"></i> <span data-lang="ro">Trivia</span><span data-lang="en" style="display:none;">Trivia</span></h5>
+                <div class="xray-trivia" id="xrayTrivia"></div>
+              </div>
+              <div class="xray-section">
+                <h5><i class="fas fa-music"></i> <span data-lang="ro">Coloană sonoră</span><span data-lang="en" style="display:none;">Soundtrack</span></h5>
+                <div class="xray-trivia" id="xraySoundtrack"></div>
+              </div>
+            </div>
+          </div>
+          <div class="player-frame" id="playerFrame">
+            <div class="player-placeholder" id="playerPlaceholder">
+              <div class="player-pulse"></div>
+              <i class="fas fa-play-circle player-play-icon" id="playerBigPlayBtn"></i>
+              <p id="playerStatus">Pregătind conținutul...</p>
+            </div>
+          </div>
+          <div class="player-controls-overlay" id="playerControls">
+            <div class="player-progress-bar-container">
+              <div class="player-progress-bar" id="playerProgressBar">
+                <div class="player-progress-fill" id="playerProgressFill" style="width:0%"></div>
+                <div class="player-progress-buffer" id="playerProgressBuffer" style="width:0%"></div>
+                <div class="player-progress-thumb" id="playerProgressThumb"></div>
+              </div>
+            </div>
+            <div class="player-buttons-row">
+              <div class="player-controls-left">
+                <button class="player-ctrl-btn" id="playerPlayBtn"><i class="fas fa-play"></i></button>
+                <button class="player-ctrl-btn" id="playerPrevBtn"><i class="fas fa-step-backward"></i></button>
+                <button class="player-ctrl-btn" id="playerNextBtn"><i class="fas fa-step-forward"></i></button>
+                <button class="player-ctrl-btn" id="playerRewindBtn"><i class="fas fa-backward"></i></button>
+                <button class="player-ctrl-btn" id="playerForwardBtn"><i class="fas fa-forward"></i></button>
+                <button class="player-ctrl-btn" id="playerVolumeBtn"><i class="fas fa-volume-up"></i></button>
+                <div class="player-volume-slider" id="playerVolumeSlider">
+                  <input type="range" min="0" max="100" value="80" id="playerVolumeRange">
+                </div>
+              </div>
+              <div class="player-controls-center">
+                <span class="player-time" id="playerTimeDisplay">00:00 / 00:00</span>
+                <span class="player-speed" id="playerSpeedDisplay">1x</span>
+              </div>
+              <div class="player-shortcuts-hint" id="playerShortcutsHint">
+                <span><kbd>Space</kbd> <span data-lang="ro">Redare</span><span data-lang="en" style="display:none;">Play</span></span>
+                <span><kbd>F</kbd> <span data-lang="ro">Ecran complet</span><span data-lang="en" style="display:none;">Fullscreen</span></span>
+                <span><kbd>←</kbd><kbd>→</kbd> <span data-lang="ro">Derulare</span><span data-lang="en" style="display:none;">Seek</span></span>
+                <span><kbd>M</kbd> <span data-lang="ro">Silențios</span><span data-lang="en" style="display:none;">Mute</span></span>
+                <span><kbd>I</kbd> X-Ray</span>
+                <span><kbd>P</kbd> PiP</span>
+              </div>
+              <div class="player-controls-right">
+                <button class="player-ctrl-btn player-speed-btn" id="playerSpeedBtn">1x</button>
+                <select class="player-quality-select" id="playerQualitySelect">
+                  <option value="auto">Auto</option>
+                  <option value="1080p">1080p</option>
+                  <option value="720p">720p</option>
+                  <option value="480p">480p</option>
+                </select>
+            <button class="player-ctrl-btn" id="playerXrayBtn" title="X-Ray (I)"><i class="fas fa-info-circle"></i></button>
+            <button class="player-ctrl-btn" id="playerPipBtn" title="Picture-in-Picture (P)"><i class="fas fa-window-restore"></i></button>
+            <button class="player-ctrl-btn" id="playerFullscreenBtn" title="Fullscreen (F)"><i class="fas fa-expand"></i></button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="player-episodes-panel" id="playerEpisodesPanel" style="display:none;">
+          <div class="episodes-panel-header">
+            <h4 id="playerEpisodesTitle"><span data-lang="ro">Episoade</span><span data-lang="en" style="display:none;">Episodes</span></h4>
+            <div class="season-selector" id="seasonSelector"></div>
+          </div>
+          <div class="episodes-list" id="episodesList"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Channel Guide -->
+    <div class="channel-guide-modal" id="channelGuide">
+      <div class="channel-guide-header">
+        <h2><span class="live-dot"></span> <span data-lang="ro">Ghid TV</span><span data-lang="en" style="display:none;">TV Guide</span></h2>
+        <button class="channel-guide-close" id="channelGuideClose"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="channel-guide-grid" id="channelGuideContent"></div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest" crossorigin="anonymous"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="/js/data.js"></script>
+  <script src="/js/player.js"></script>
+  <script src="/js/app.js"></script>
+  <script>
+  // Load secondary scripts with error isolation
+  var secondaryScripts = [
+    '/js/discovery.js', '/js/interactive.js', '/js/parental.js',
+    '/js/collections.js', '/js/watchparty.js', '/js/comingsoon.js',
+    '/js/ratings.js', '/js/achievements.js', '/js/trending.js',
+    '/js/mystats.js', '/js/timeline.js'
+  ];
+  function loadScript(src) {
+    var s = document.createElement('script');
+    s.src = src;
+    s.onerror = function() { console.warn('⚠️ Script failed to load:', src); };
+    document.body.appendChild(s);
+  }
+  // Load secondary scripts dynamically so one failure doesn't block others
+  secondaryScripts.forEach(function(src) {
+    try { loadScript(src); } catch(e) { console.warn('Script error:', src, e); }
+  });
+  </script>
+  <script>
+    // PWA Service Worker Registration
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/service-worker.js').then(reg => {
+          console.log('✅ PWA ServiceWorker registered:', reg.scope);
+        }, err => {
+          console.log('❌ PWA ServiceWorker failed:', err);
+        });
+      });
+    }
+    
+    // PWA Install Prompt
+    let deferredPrompt = null;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      const banner = document.getElementById('pwaInstallBanner');
+      if (banner) banner.classList.add('show');
+    });
+    
+    window.installPWA = async function() {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      const result = await deferredPrompt.userChoice;
+      console.log('PWA install result:', result.outcome);
+      deferredPrompt = null;
+      const banner = document.getElementById('pwaInstallBanner');
+      if (banner) banner.classList.remove('show');
+    };
+  </script>
+  
+  <!-- PWA Install Banner -->
+  <div class="pwa-install-banner" id="pwaInstallBanner">
+    <i class="fas fa-download" style="color:var(--accent-secondary);font-size:20px;"></i>
+    <span data-lang="ro">Instalează Animaxia pe dispozitivul tău</span>
+    <span data-lang="en" style="display:none;">Install Animaxia on your device</span>
+    <button class="btn btn-primary" onclick="installPWA()" style="padding:6px 14px;font-size:13px;white-space:nowrap;">
+      <i class="fas fa-download"></i> <span data-lang="ro">Instalează</span><span data-lang="en" style="display:none;">Install</span>
+    </button>
+    <button class="btn btn-secondary" onclick="this.closest('.pwa-install-banner').classList.remove('show')" style="padding:6px 10px;font-size:13px;">
+      <i class="fas fa-times"></i>
+    </button>
+  </div>
+</body>
+</html>

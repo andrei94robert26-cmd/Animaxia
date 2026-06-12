@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Status • Animaxia</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --bg-card: #12121a;
+      --bg-tertiary: #1a1a2e;
+      --text: #ffffff;
+      --text-secondary: #e0e0e0;
+      --text-tertiary: #a0a0b0;
+      --text-muted: #6c6c80;
+      --accent: #6c5ce7;
+      --accent-secondary: #a29bfe;
+      --green: #00b894;
+      --red: #e74c3c;
+      --yellow: #fdcb6e;
+      --blue: #0984e3;
+      --radius: 12px;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', -apple-system, sans-serif;
+      min-height: 100vh;
+      padding: 40px 24px;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+
+    /* Header */
+    .header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 40px; flex-wrap: wrap; gap: 16px;
+    }
+    .logo {
+      display: flex; align-items: center; gap: 8px; font-size: 24px; font-weight: 900;
+    }
+    .logo-icon { color: var(--accent-secondary); font-size: 28px; }
+    .logo-text { background: linear-gradient(135deg, #6c5ce7, #a29bfe); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    .status-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 16px; border-radius: 20px; font-size: 13px; font-weight: 600;
+    }
+    .status-badge.healthy { background: rgba(0,184,148,0.12); color: var(--green); }
+    .status-badge.degraded { background: rgba(253,203,110,0.12); color: var(--yellow); }
+    .status-badge.down { background: rgba(231,76,60,0.12); color: var(--red); }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .status-dot.healthy { background: var(--green); box-shadow: 0 0 8px rgba(0,184,148,0.5); }
+    .status-dot.degraded { background: var(--yellow); }
+    .status-dot.down { background: var(--red); }
+
+    .last-updated { font-size: 13px; color: var(--text-tertiary); }
+
+    /* Grid */
+    .grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px; margin-bottom: 24px;
+    }
+    .card {
+      background: var(--bg-card); border: 1px solid rgba(255,255,255,0.06);
+      border-radius: var(--radius); padding: 20px;
+      transition: all 0.2s ease;
+    }
+    .card:hover { border-color: rgba(255,255,255,0.1); transform: translateY(-2px); }
+    .card-header {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;
+    }
+    .card-title {
+      font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px;
+    }
+    .card-title i { width: 20px; text-align: center; }
+    .card-value {
+      font-size: 28px; font-weight: 800; margin-bottom: 4px;
+    }
+    .card-sub {
+      font-size: 12px; color: var(--text-tertiary);
+    }
+    .card-meter {
+      margin-top: 12px; height: 3px; background: rgba(255,255,255,0.06);
+      border-radius: 2px; overflow: hidden;
+    }
+    .card-meter-fill { height: 100%; border-radius: 2px; transition: width 1s ease; }
+
+    /* Status indicators */
+    .status-indicator {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 0; font-size: 13px;
+    }
+    .status-label { color: var(--text-tertiary); min-width: 100px; }
+    .status-check { font-weight: 600; }
+    .status-check.online { color: var(--green); }
+    .status-check.offline { color: var(--red); }
+    .status-check.warning { color: var(--yellow); }
+
+    /* Service list */
+    .service-list { display: flex; flex-direction: column; gap: 6px; }
+    .service-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 12px; border-radius: 8px;
+      background: rgba(255,255,255,0.02); transition: background 0.2s;
+    }
+    .service-item:hover { background: rgba(255,255,255,0.04); }
+    .service-name { font-size: 13px; font-weight: 500; }
+    .service-tag {
+      font-size: 11px; padding: 2px 10px; border-radius: 10px; font-weight: 600;
+    }
+    .service-tag.active { background: rgba(0,184,148,0.12); color: var(--green); }
+    .service-tag.inactive { background: rgba(231,76,60,0.12); color: var(--red); }
+    .service-tag.unconfigured { background: rgba(255,255,255,0.06); color: var(--text-tertiary); }
+
+    /* Table styles */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; padding: 10px 12px; font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.5px; color: var(--text-tertiary);
+      border-bottom: 1px solid rgba(255,255,255,0.06); font-weight: 600; }
+    td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+
+    /* Progress rings */
+    .ring-container { display: flex; align-items: center; gap: 12px; }
+    .ring { position: relative; width: 48px; height: 48px; }
+    .ring svg { transform: rotate(-90deg); }
+    .ring circle { fill: none; stroke-width: 3; }
+    .ring-bg { stroke: rgba(255,255,255,0.06); }
+    .ring-fill { stroke: var(--accent); stroke-linecap: round; transition: stroke-dashoffset 1s ease; }
+    .ring-value { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      font-size: 12px; font-weight: 700; }
+
+    /* Actions bar */
+    .actions { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 600;
+      border: none; cursor: pointer; transition: all 0.15s ease; text-decoration: none;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #6c5ce7, #a29bfe); color: white;
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(108,92,231,0.3); }
+    .btn-secondary {
+      background: rgba(255,255,255,0.06); color: var(--text);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .btn-secondary:hover { background: rgba(255,255,255,0.1); }
+
+    /* Footer */
+    .footer { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 40px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.04); }
+
+    .section-title { font-size: 16px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+
+    @media (max-width: 600px) {
+      body { padding: 20px 16px; }
+      .grid { grid-template-columns: 1fr; }
+      .header { flex-direction: column; align-items: flex-start; }
+    }
+
+    /* Loading shimmer */
+    .shimmer { background: linear-gradient(90deg, var(--bg-card) 25%, rgba(255,255,255,0.03) 50%, var(--bg-card) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 8px; }
+    @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div class="logo">
+        <span class="logo-icon">✦</span>
+        <span class="logo-text">Animaxia</span>
+        <span style="font-size:14px;font-weight:400;color:var(--text-tertiary);margin-left:4px;">Status</span>
+      </div>
+      <div class="header-right">
+        <span class="status-badge" id="overallStatus">
+          <span class="status-dot" id="overallDot"></span>
+          <span id="overallLabel">Se încarcă...</span>
+        </span>
+        <span class="last-updated" id="lastUpdated"></span>
+        <button class="btn btn-secondary" onclick="refresh()"><i class="fas fa-sync-alt"></i> Refresh</button>
+      </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="grid" id="statsGrid"></div>
+
+    <!-- Services Status -->
+    <div class="card" style="margin-bottom:24px;">
+      <div class="card-header">
+        <h3 class="card-title"><i class="fas fa-cogs"></i> Servicii</h3>
+      </div>
+      <div class="service-list" id="servicesList"></div>
+    </div>
+
+    <!-- Detailed Status -->
+    <div class="card" style="margin-bottom:24px;">
+      <div class="card-header">
+        <h3 class="card-title"><i class="fas fa-info-circle"></i> Stare detaliată</h3>
+      </div>
+      <div id="detailedStatus"></div>
+    </div>
+
+    <!-- Env Info -->
+    <div class="card" style="margin-bottom:24px;">
+      <div class="card-header">
+        <h3 class="card-title"><i class="fas fa-key"></i> Configurare API Keys</h3>
+      </div>
+      <div class="table-wrap">
+        <table id="envTable">
+          <thead><tr><th>Cheie</th><th>Status</th></tr></thead>
+          <tbody id="envBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="footer">
+      <p>Animaxia v6.0 • Status Dashboard • Actualizare automată la fiecare 30s</p>
+    </div>
+  </div>
+
+  <script>
+    async function fetchStatus() {
+      try {
+        const res = await fetch('/api/status');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return await res.json();
+      } catch (e) {
+        return { status: 'down', error: e.message, uptime: 0, version: 'N/A',
+          timestamp: new Date().toISOString(), services: {}, db: null,
+          memory: null, apiKeys: {} };
+      }
+    }
+
+    function updateOverall(data) {
+      var badge = document.getElementById('overallStatus');
+      var dot = document.getElementById('overallDot');
+      var label = document.getElementById('overallLabel');
+      var updated = document.getElementById('lastUpdated');
+
+      var status = data.status || 'down';
+      badge.className = 'status-badge ' + status;
+      dot.className = 'status-dot ' + status;
+      var labels = { healthy: 'Toate sistemele funcționale', degraded: 'Sistem degradat', down: 'Indisponibil' };
+      label.textContent = labels[status] || status;
+
+      var ts = data.timestamp ? new Date(data.timestamp).toLocaleTimeString('ro-RO') : '—';
+      updated.textContent = 'Actualizat: ' + ts;
+
+      // Page title
+      document.title = (status === 'healthy' ? '✅' : status === 'degraded' ? '⚠️' : '❌') + ' Status • Animaxia';
+    }
+
+    function updateStats(data) {
+      var grid = document.getElementById('statsGrid');
+      var stats = [
+        { icon: 'fas fa-server', label: 'Uptime', value: formatUptime(data.uptime || 0), color: '#6c5ce7' },
+        { icon: 'fas fa-tag', label: 'Versiune', value: data.version || 'N/A', color: '#a29bfe' },
+        { icon: 'fas fa-database', label: 'Bază de date', value: formatDb(data.db), color: data.db ? '#00b894' : '#e74c3c' },
+        { icon: 'fas fa-memory', label: 'Memorie', value: formatMemory(data.memory), color: '#0984e3' },
+      ];
+
+      grid.innerHTML = stats.map(function(s) {
+        return '<div class="card">' +
+          '<div class="card-header">' +
+            '<span class="card-title"><i class="' + s.icon + '" style="color:' + s.color + '"></i> ' + s.label + '</span>' +
+          '</div>' +
+          '<div class="card-value">' + s.value + '</div>' +
+          (s.sub ? '<div class="card-sub">' + s.sub + '</div>' : '') +
+        '</div>';
+      }).join('');
+    }
+
+    function formatUptime(seconds) {
+      var d = Math.floor(seconds / 86400);
+      var h = Math.floor((seconds % 86400) / 3600);
+      var m = Math.floor((seconds % 3600) / 60);
+      var parts = [];
+      if (d > 0) parts.push(d + 'd');
+      if (h > 0) parts.push(h + 'h');
+      parts.push(m + 'm');
+      return parts.join(' ');
+    }
+
+    function formatDb(db) {
+      if (!db) return '❌';
+      return db.connected ? '✅ ' + db.host : '❌ ' + (db.error || 'eroare');
+    }
+
+    function formatMemory(mem) {
+      if (!mem) return 'N/A';
+      var used = (mem.used / 1024 / 1024).toFixed(1);
+      var total = (mem.total / 1024 / 1024).toFixed(1);
+      return used + 'MB / ' + total + 'MB';
+    }
+
+    function updateServices(data) {
+      var list = document.getElementById('servicesList');
+      var services = data.services || {};
+      var items = [
+        { name: 'Stripe (Plăți)', key: 'stripe', icon: 'fa-credit-card' },
+        { name: 'Email (Resend)', key: 'email', icon: 'fa-envelope' },
+        { name: 'TMDB (Metadata)', key: 'tmdb', icon: 'fa-film' },
+        { name: 'Web Push', key: 'webPush', icon: 'fa-bell' },
+        { name: 'WebSocket', key: 'ws', icon: 'fa-plug' },
+        { name: 'JWT (Autentificare)', key: 'jwt', icon: 'fa-shield-alt' },
+        { name: 'Stripe Webhook', key: 'stripeWebhook', icon: 'fa-exchange-alt' },
+      ];
+
+      list.innerHTML = items.map(function(item) {
+        var svc = services[item.key];
+        var status = svc ? (svc.configured ? (svc.connected ? 'active' : 'unconfigured') : 'inactive') : 'unconfigured';
+        var label = svc ? (svc.configured ? (svc.connected ? '✅ Configurat' : '⚠️ Neconfigurat') : '❌ Indisponibil') : '⚠️ Neconfigurat';
+        if (item.key === 'ws') {
+          status = svc ? 'active' : 'active';
+          label = '✅ Activat';
+        }
+        if (item.key === 'jwt') {
+          status = svc && svc.configured ? 'active' : 'unconfigured';
+          label = svc && svc.configured ? '✅ Configurat' : '⚠️ Neconfigurat';
+        }
+        return '<div class="service-item">' +
+          '<span class="service-name"><i class="fas ' + item.icon + '" style="width:20px;color:var(--text-tertiary);"></i> ' + item.name + '</span>' +
+          '<span class="service-tag ' + status + '">' + label + '</span>' +
+        '</div>';
+      }).join('');
+    }
+
+    function updateDetailed(data) {
+      var el = document.getElementById('detailedStatus');
+      var rows = [];
+      if (data.memory) {
+        var pct = data.memory.total > 0 ? ((data.memory.used / data.memory.total) * 100) : 0;
+        rows.push(
+          '<div class="status-indicator">' +
+            '<span class="status-label">Memorie utilizată</span>' +
+            '<div class="ring-container">' +
+              '<div class="ring">' +
+                '<svg width="48" height="48" viewBox="0 0 48 48">' +
+                  '<circle class="ring-bg" cx="24" cy="24" r="18"></circle>' +
+                  '<circle class="ring-fill" cx="24" cy="24" r="18" stroke-dasharray="113" stroke-dashoffset="' + (113 - 113 * pct / 100) + '" style="stroke:' + (pct > 80 ? '#e74c3c' : pct > 60 ? '#fdcb6e' : '#00b894') + '"></circle>' +
+                '</svg>' +
+                '<span class="ring-value">' + Math.round(pct) + '%</span>' +
+              '</div>' +
+              '<div>' +
+                '<div style="font-size:13px;font-weight:600;">' + (data.memory.used / 1024 / 1024).toFixed(1) + ' MB</div>' +
+                '<div style="font-size:11px;color:var(--text-tertiary);">din ' + (data.memory.total / 1024 / 1024).toFixed(0) + ' MB</div>' +
+              '</div>' +
+            '</div>' +
+          '</div>'
+        );
+      }
+
+      if (data.db) {
+        rows.push(
+          '<div class="status-indicator">' +
+            '<span class="status-label">Conexiune DB</span>' +
+            '<span class="status-check ' + (data.db.connected ? 'online' : 'offline') + '">' +
+              (data.db.connected ? '✅ Conectat' : '❌ ' + (data.db.error || 'Deconectat')) +
+            '</span>' +
+          '</div>'
+        );
+      }
+
+      // DB stats
+      if (data.dbStats) {
+        rows.push(
+          '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;">' +
+            Object.entries(data.dbStats).map(function(kv) {
+              return '<div style="background:rgba(255,255,255,0.02);border-radius:8px;padding:8px 14px;text-align:center;min-width:80px;">' +
+                '<div style="font-size:18px;font-weight:800;">' + kv[1] + '</div>' +
+                '<div style="font-size:11px;color:var(--text-tertiary);">' + kv[0].charAt(0).toUpperCase() + kv[0].slice(1) + '</div>' +
+              '</div>';
+            }).join('') +
+          '</div>'
+        );
+      }
+
+      el.innerHTML = rows.join('');
+    }
+
+    function updateEnv(data) {
+      var tbody = document.getElementById('envBody');
+      var keys = data.apiKeys || {};
+      var items = [
+        { name: 'JWT_SECRET', key: 'jwt', icon: 'fa-shield-alt' },
+        { name: 'STRIPE_SECRET', key: 'stripe', icon: 'fa-credit-card' },
+        { name: 'RESEND_API_KEY', key: 'resend', icon: 'fa-envelope' },
+        { name: 'TMDB_API_KEY', key: 'tmdb', icon: 'fa-film' },
+        { name: 'VAPID (Web Push)', key: 'vapid', icon: 'fa-bell' },
+      ];
+
+      tbody.innerHTML = items.map(function(item) {
+        var val = keys[item.key];
+        var configured = val && val.length > 0;
+        var display = configured ? val.substring(0, 12) + '...' : 'Neconfigurat';
+        return '<tr>' +
+          '<td><i class="fas ' + item.icon + '" style="width:18px;color:var(--text-tertiary);"></i> ' + item.name + '</td>' +
+          '<td><span class="service-tag ' + (configured ? 'active' : 'unconfigured') + '">' +
+            (configured ? '✅ ' + display : '⚠️ Neconfigurat') +
+          '</span></td>' +
+        '</tr>';
+      }).join('');
+    }
+
+    function refresh() {
+      var btn = document.querySelector('.btn[onclick*=\"refresh\"]');
+      if (btn) { btn.innerHTML = '<i class=\"fas fa-spinner fa-spin\"></i> Se reîmprospătează...'; btn.disabled = true; }
+
+      fetchStatus().then(function(data) {
+        updateOverall(data);
+        updateStats(data);
+        updateServices(data);
+        updateDetailed(data);
+        updateEnv(data);
+      }).catch(function() {
+        document.getElementById('overallLabel').textContent = 'Eroare conectare';
+      }).finally(function() {
+        if (btn) { btn.innerHTML = '<i class=\"fas fa-sync-alt\"></i> Refresh'; btn.disabled = false; }
+      });
+    }
+
+    // Auto-refresh every 30s
+    refresh();
+    setInterval(refresh, 30000);
+  </script>
+</body>
+</html>

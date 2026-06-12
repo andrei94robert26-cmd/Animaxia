@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Environment variables - CONTAIN REAL API KEYS, NEVER COMMIT
+.env
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Uploads
+public/avatars/
+public/offline/
+
+# Database
+*.sqlite
+*.sqlite3
+
+# Temp
+tmp/
+temp/
