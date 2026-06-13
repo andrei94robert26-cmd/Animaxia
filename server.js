@@ -199,6 +199,15 @@ pool.query('SELECT NOW()').then(r => {
   initFullTextSearch();
   initPushTables();
   initParentalTables();
+  initAddonTables();
+  initContinentTables();
+  initIndustryTables();
+  initFranchiseTables();
+  initUploadTables();
+  initContentModuleTables();
+  seedAddonData();
+  seedIndustryData();
+  seedFranchiseData();
 }).catch(e => {
   console.error('❌ PostgreSQL connection failed:', e.message);
   process.exit(1);
@@ -1045,6 +1054,54 @@ app.get('/api/content', async (req, res) => {
         ]
       }
     });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+
+
+
+});
+// GET /api/content/stats
+app.get('/api/content/stats', async (req, res) => {
+  try {
+    const [total, movies, series, genres, totalViews] = await Promise.all([
+      pool.query('SELECT COUNT(*) as c FROM content_items'),
+      pool.query("SELECT COUNT(*) as c FROM content_items WHERE content_type = 'movie'"),
+      pool.query("SELECT COUNT(*) as c FROM content_items WHERE content_type = 'series'"),
+      pool.query('SELECT unnest(genre) as g, COUNT(*) as c FROM content_items GROUP BY g ORDER BY c DESC LIMIT 10'),
+      pool.query('SELECT COALESCE(SUM(view_count),0) as v FROM content_items')
+    ]);
+    res.json({ success: true, stats: {
+      total: parseInt(total.rows[0].c),
+      movies: parseInt(movies.rows[0].c),
+      series: parseInt(series.rows[0].c),
+      genres: genres.rows.map(r => ({ name: r.g, count: parseInt(r.c) })),
+      totalViews: parseInt(totalViews.rows[0].v)
+    }});
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/content/browse
+app.get('/api/content/browse', async (req, res) => {
+  try {
+    const { sort, genre, type, year, q, page } = req.query;
+    const limit = 20;
+    const offset = ((parseInt(page) || 1) - 1) * limit;
+    let where = [];
+    let params = [];
+    let p = 1;
+    if (genre) { where.push(`$${p} = ANY(genre)`); params.push(genre); p++; }
+    if (type) { where.push(`content_type = $${p}`); params.push(type); p++; }
+    if (year) { where.push(`year = $${p}`); params.push(year); p++; }
+    if (q) { where.push(`(title ILIKE $${p} OR title_en ILIKE $${p+1})`); params.push(`%${q}%`, `%${q}%`); p += 2; }
+    const whereClause = where.length ? 'WHERE ' + where.join(' AND ') : '';
+    let orderBy = 'ORDER BY created_at DESC';
+    if (sort === 'views') orderBy = 'ORDER BY view_count DESC';
+    else if (sort === 'rating') orderBy = 'ORDER BY rating DESC NULLS LAST';
+    else if (sort === 'year') orderBy = 'ORDER BY year DESC NULLS LAST';
+    else if (sort === 'title') orderBy = 'ORDER BY title ASC';
+    const { rows: totalRows } = await pool.query(`SELECT COUNT(*) as total FROM content_items ${whereClause}`, params);
+    const total = parseInt(totalRows[0].total);
+    const { rows } = await pool.query(`SELECT * FROM content_items ${whereClause} ${orderBy} LIMIT $${p} OFFSET $${p+1}`, [...params, limit, offset]);
+    res.json({ success: true, data: rows, total, page: parseInt(page) || 1, pages: Math.ceil(total / limit) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -2515,6 +2572,519 @@ app.get('/api/status', async (req, res) => {
 app.get('/status', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'status.html'));
 });
+
+
+// ====== ADDON MODULE ======
+async function initAddonTables() {
+  try {
+    await pool.query(`CREATE TABLE IF NOT EXISTS addons (
+      id SERIAL PRIMARY KEY, name VARCHAR(200) NOT NULL,
+      slug VARCHAR(200) UNIQUE NOT NULL, version VARCHAR(20) DEFAULT '1.0.0',
+      description TEXT DEFAULT '', author VARCHAR(200) DEFAULT '',
+      icon_url TEXT DEFAULT '', type VARCHAR(50) DEFAULT 'extension',
+      config_schema JSONB DEFAULT '{}', permissions TEXT[] DEFAULT '{}',
+      downloads INTEGER DEFAULT 0, rating NUMERIC(3,1) DEFAULT 0,
+      review_count INTEGER DEFAULT 0, is_official BOOLEAN DEFAULT false,
+      is_active BOOLEAN DEFAULT true, created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW())`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS user_addons (
+      id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      addon_id INTEGER REFERENCES addons(id) ON DELETE CASCADE,
+      is_installed BOOLEAN DEFAULT true, config JSONB DEFAULT '{}',
+      installed_at TIMESTAMP DEFAULT NOW(), UNIQUE(user_id, addon_id))`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS addon_reviews (
+      id SERIAL PRIMARY KEY, addon_id INTEGER REFERENCES addons(id) ON DELETE CASCADE,
+      profile_id INTEGER DEFAULT 0, rating INTEGER DEFAULT 0,
+      comment TEXT DEFAULT '', created_at TIMESTAMP DEFAULT NOW())`);
+    console.log('✅ Addon tables ready');
+  } catch (e) { console.log('ℹ️ Addon init:', e.message); }
+}
+
+async function seedAddonData() {
+  try {
+    const { rows: check } = await pool.query('SELECT COUNT(*) as c FROM addons');
+    if (parseInt(check[0].c) === 0) {
+      await pool.query(`INSERT INTO addons (name, slug, version, description, author, type, downloads, rating, review_count, is_official, is_active) VALUES
+        ('Anime Enhancer','anime-enhancer','1.0.0','Improves anime streaming','Animaxia Team','extension',1250,4.5,89,true,true),
+        ('Subtitle Pro','subtitle-pro','1.2.0','Advanced subtitle support','Community Dev','integration',890,4.2,45,false,true),
+        ('Dark Theme Pro','dark-theme-pro','1.0.0','Enhanced dark theme','Animaxia Team','theme',2100,4.8,156,true,true),
+        ('Recommendation Engine','rec-engine','2.0.0','AI-powered recommendations','Animaxia Team','tool',3200,4.9,234,true,true),
+        ('Download Manager Plus','dl-manager-plus','1.1.0','Enhanced downloads','Community Dev','tool',670,3.8,23,false,true),
+        ('Kids Mode','kids-mode','1.0.0','Parental controls','Animaxia Team','extension',1800,4.6,112,true,true),
+        ('Watch Party Extended','watch-party-ext','1.3.0','Enhanced watch party','Community Dev','integration',430,4.0,31,false,true),
+        ('Animaxia Studio','animaxia-studio','1.0.0','Create your own content','Animaxia Team','tool',560,4.3,67,true,true)`);
+      console.log('✅ Addon seed data inserted');
+    }
+  } catch (e) { console.log('ℹ️ Addon seed:', e.message); }
+}
+
+// GET /api/addon/list
+app.get('/api/addon/list', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const offset = (page - 1) * limit;
+    const { rows: totalRows } = await pool.query('SELECT COUNT(*) as total FROM addons');
+    const total = parseInt(totalRows[0].total);
+    const { rows } = await pool.query('SELECT id,name,slug,version,description,author,icon_url,type,downloads,rating,review_count,is_official,is_active FROM addons ORDER BY is_official DESC, downloads DESC LIMIT \$1 OFFSET \$2', [limit, offset]);
+    res.json({ success: true, data: rows, total, page, pages: Math.ceil(total / limit) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/addon/installed
+app.get('/api/addon/installed', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT a.id,a.name,a.slug,a.version,a.description,a.author,a.icon_url,a.type,ua.config,ua.installed_at FROM user_addons ua JOIN addons a ON ua.addon_id = a.id WHERE ua.user_id = \$1 AND ua.is_installed = true', [req.user.userId]);
+    res.json({ success: true, data: rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/addon/install
+app.post('/api/addon/install', requireAuth, async (req, res) => {
+  try {
+    const { addonId } = req.body;
+    await pool.query('INSERT INTO user_addons (user_id, addon_id) VALUES (\$1,\$2) ON CONFLICT (user_id,addon_id) DO UPDATE SET is_installed = true', [req.user.userId, addonId]);
+    await pool.query('UPDATE addons SET downloads = downloads + 1 WHERE id = \$1', [addonId]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/addon/uninstall
+app.post('/api/addon/uninstall', requireAuth, async (req, res) => {
+  try {
+    await pool.query('UPDATE user_addons SET is_installed = false WHERE user_id = \$1 AND addon_id = \$2', [req.user.userId, req.body.addonId]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/addon/configure
+app.post('/api/addon/configure', requireAuth, async (req, res) => {
+  try {
+    await pool.query('UPDATE user_addons SET config = \$1 WHERE user_id = \$2 AND addon_id = \$3', [JSON.stringify(req.body.config), req.user.userId, req.body.addonId]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ====== ADDON MARKETPLACE ======
+// GET /api/marketplace/search
+app.get('/api/marketplace/search', async (req, res) => {
+  try {
+    const q = req.query.q || '';
+    const type = req.query.type || '';
+    let where = 'WHERE is_active = true';
+    let params = [];
+    if (q) { params.push('%' + q + '%'); where += ' AND (name ILIKE \$' + params.length + ' OR description ILIKE \$' + params.length + ')'; }
+    if (type) { params.push(type); where += ' AND type = \$' + params.length; }
+    const { rows: totalRows } = await pool.query('SELECT COUNT(*) as total FROM addons ' + where, params);
+    const total = parseInt(totalRows[0].total);
+    const { rows } = await pool.query('SELECT id,name,slug,version,description,author,icon_url,type,downloads,rating,review_count,is_official FROM addons ' + where + ' ORDER BY is_official DESC, downloads DESC LIMIT 20', params);
+    res.json({ success: true, data: rows, total });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/marketplace/featured
+app.get('/api/marketplace/featured', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT id,name,slug,version,description,author,icon_url,type,downloads,rating,review_count FROM addons WHERE is_official = true AND is_active = true ORDER BY downloads DESC LIMIT 4');
+    res.json({ success: true, data: rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/marketplace/reviews/:addonId
+app.get('/api/marketplace/reviews/:addonId', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT r.id,r.rating,r.comment,r.created_at,p.name as profile_name FROM addon_reviews r JOIN profiles p ON r.profile_id = p.id WHERE r.addon_id = \$1 ORDER BY r.created_at DESC', [req.params.addonId]);
+    res.json({ success: true, data: rows });
+  } catch (e) { res.json({ success: true, data: [] }); }
+});
+
+// POST /api/marketplace/review
+app.post('/api/marketplace/review', requireAuth, async (req, res) => {
+  try {
+    await pool.query('INSERT INTO addon_reviews (addon_id,profile_id,rating,comment) VALUES (\$1,\$2,\$3,\$4)', [req.body.addonId, req.body.profileId || 0, req.body.rating, req.body.comment]);
+    await pool.query('UPDATE addons SET rating = (SELECT AVG(rating) FROM addon_reviews WHERE addon_id = \$1), review_count = (SELECT COUNT(*) FROM addon_reviews WHERE addon_id = \$1) WHERE id = \$1', [req.body.addonId]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ====== CONTINENT MODULE ======
+async function initContinentTables() {
+  try {
+    await pool.query(`CREATE TABLE IF NOT EXISTS continent_regions (
+      id SERIAL PRIMARY KEY, name VARCHAR(200) NOT NULL,
+      code VARCHAR(10) UNIQUE NOT NULL, flag VARCHAR(10) DEFAULT '',
+      description TEXT DEFAULT '', language VARCHAR(50) DEFAULT '',
+      content_count INTEGER DEFAULT 0, color VARCHAR(20) DEFAULT '#6c5ce7',
+      is_active BOOLEAN DEFAULT true, created_at TIMESTAMP DEFAULT NOW())`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS continent_content (
+      id SERIAL PRIMARY KEY, region_id INTEGER REFERENCES continent_regions(id) ON DELETE CASCADE,
+      item_id VARCHAR(50) NOT NULL, is_featured BOOLEAN DEFAULT false,
+      added_at TIMESTAMP DEFAULT NOW(), UNIQUE(region_id, item_id))`);
+    console.log('✅ Continent tables ready');
+    const { rows: check } = await pool.query('SELECT COUNT(*) as c FROM continent_regions');
+    if (parseInt(check[0].c) === 0) {
+      await pool.query(`INSERT INTO continent_regions (name,code,flag,language,color) VALUES
+        ('Europa','eu','🇪🇺','Romana,Engleza,Franceza','#6c5ce7'),
+        ('America de Nord','na','🇺🇸','Engleza,Spaniola','#00b894'),
+        ('America Latina','la','🌎','Spaniola,Portugheza','#e17055'),
+        ('Asia','as','🌏','Japoneza,Coreeana,Chineza','#0984e3'),
+        ('Africa','af','🌍','Araba,Franceza,Engleza','#fdcb6e'),
+        ('Oceania','oc','🌏','Engleza','#e84393')`);
+    }
+  } catch (e) { console.log('ℹ️ Continent init:', e.message); }
+}
+
+// GET /api/continent/regions
+app.get('/api/continent/regions', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT id,name,code,flag,language,content_count,color FROM continent_regions WHERE is_active = true ORDER BY name');
+    res.json({ success: true, data: rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/continent/region/:id
+app.get('/api/continent/region/:id', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM continent_regions WHERE id = \$1', [req.params.id]);
+    res.json({ success: true, data: rows[0] || null });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/continent/region/:id/content
+app.get('/api/continent/region/:id/content', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT cc.item_id,ci.title,ci.title_en,ci.year,ci.duration,ci.content_type,ci.bg_color,ci.is_featured FROM continent_content cc JOIN content_items ci ON cc.item_id = ci.id WHERE cc.region_id = \$1', [req.params.id]);
+    res.json({ success: true, data: rows });
+  } catch (e) { res.json({ success: true, data: [] }); }
+});
+
+// POST /api/continent/region
+app.post('/api/continent/region', requireAuth, async (req, res) => {
+  try {
+    await pool.query('INSERT INTO continent_regions (name,code,flag,language) VALUES (\$1,\$2,\$3,\$4)', [req.body.name, req.body.code, req.body.flag, req.body.language]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/continent/map
+app.post('/api/continent/map', requireAuth, async (req, res) => {
+  try {
+    await pool.query('INSERT INTO continent_content (region_id,item_id,is_featured) VALUES (\$1,\$2,\$3) ON CONFLICT DO NOTHING', [req.body.regionId, req.body.itemId, req.body.isFeatured || false]);
+    await pool.query('UPDATE continent_regions SET content_count = (SELECT COUNT(*) FROM continent_content WHERE region_id = \$1) WHERE id = \$1', [req.body.regionId]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ====== BILLING / SUBSCRIPTION MODULE ======
+app.get('/api/billing/plans', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM subscription_plans ORDER BY price ASC');
+    res.json({ success: true, data: rows });
+  } catch {
+    res.json({ success: true, data: [
+      { id: 1, name: 'Free', price: 0, period: 'lunar', features: ['Acces limitat','480p','Reclame'], is_active: true },
+      { id: 2, name: 'Basic', price: 19.99, period: 'lunar', features: ['Acces nelimitat','720p','Fara reclame','1 ecran'], is_active: true },
+      { id: 3, name: 'Premium', price: 39.99, period: 'lunar', features: ['4K Ultra HD','Fara reclame','4 ecrane','Descarcari','X-Ray'], is_active: true },
+      { id: 4, name: 'Family', price: 59.99, period: 'lunar', features: ['4K Ultra HD','Fara reclame','6 ecrane','Descarcari','X-Ray','Control parental'], is_active: true }
+    ]});
+  }
+});
+
+app.get('/api/billing/current', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT plan_id,status,current_period_end,created_at FROM subscriptions WHERE user_id = \$1 AND status = \$2 LIMIT 1', [req.user.userId, 'active']);
+    if (rows.length === 0) return res.json({ success: true, data: { plan: { name: 'Free', price: 0 }, status: 'active' } });
+    const { rows: plan } = await pool.query('SELECT * FROM subscription_plans WHERE id = \$1', [rows[0].plan_id]);
+    res.json({ success: true, data: { ...rows[0], plan: plan[0] || {} } });
+  } catch { res.json({ success: true, data: { plan: { name: 'Free', price: 0 }, status: 'active' } }); }
+});
+
+app.get('/api/billing/history', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM payment_history WHERE user_id = \$1 ORDER BY created_at DESC LIMIT 20', [req.user.userId]);
+    res.json({ success: true, data: rows });
+  } catch { res.json({ success: true, data: [] }); }
+});
+
+app.post('/api/billing/subscribe', requireAuth, async (req, res) => {
+  try {
+    const { planId } = req.body;
+    const { rows: plans } = await pool.query('SELECT * FROM subscription_plans WHERE id = \$1', [planId]);
+    if (plans.length === 0) return res.status(404).json({ error: 'Plan not found' });
+    await pool.query(`INSERT INTO subscriptions (user_id,plan_id,status,current_period_end) VALUES (\$1,\$2,\$3,NOW() + INTERVAL '1 month') ON CONFLICT (user_id) DO UPDATE SET plan_id = \$2, status = \$3, current_period_end = NOW() + INTERVAL '1 month'`, [req.user.userId, planId, 'active']);
+    await pool.query('INSERT INTO payment_history (user_id,amount,status,description) VALUES (\$1,\$2,\$3,\$4)', [req.user.userId, plans[0].price, 'paid', 'Abonament ' + plans[0].name]);
+    res.json({ success: true, message: 'Abonament activat!' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+
+
+// ====== INDUSTRY MODULE ======
+async function initIndustryTables() {
+  try {
+    await pool.query(`CREATE TABLE IF NOT EXISTS industry_news (
+      id SERIAL PRIMARY KEY, title VARCHAR(500) NOT NULL,
+      excerpt TEXT DEFAULT '', content TEXT DEFAULT '',
+      image_url TEXT DEFAULT '', source VARCHAR(200) DEFAULT '',
+      source_url TEXT DEFAULT '', category VARCHAR(50) DEFAULT 'general',
+      published_at TIMESTAMP DEFAULT NOW(), created_at TIMESTAMP DEFAULT NOW())`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS industry_companies (
+      id SERIAL PRIMARY KEY, name VARCHAR(300) NOT NULL,
+      slug VARCHAR(300) UNIQUE NOT NULL, description TEXT DEFAULT '',
+      logo_url TEXT DEFAULT '', website TEXT DEFAULT '',
+      location VARCHAR(200) DEFAULT '', employees INTEGER DEFAULT 0,
+      founded_year VARCHAR(10) DEFAULT '', is_active BOOLEAN DEFAULT true,
+      created_at TIMESTAMP DEFAULT NOW())`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS industry_events (
+      id SERIAL PRIMARY KEY, title VARCHAR(500) NOT NULL,
+      description TEXT DEFAULT '', event_date TIMESTAMP,
+      location VARCHAR(300) DEFAULT '', event_type VARCHAR(50) DEFAULT 'conference',
+      image_url TEXT DEFAULT '', registration_url TEXT DEFAULT '',
+      is_virtual BOOLEAN DEFAULT false, created_at TIMESTAMP DEFAULT NOW())`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS industry_jobs (
+      id SERIAL PRIMARY KEY, title VARCHAR(300) NOT NULL,
+      company VARCHAR(300) NOT NULL, location VARCHAR(200) DEFAULT '',
+      description TEXT DEFAULT '', requirements TEXT DEFAULT '',
+      salary_range VARCHAR(100) DEFAULT '', job_type VARCHAR(50) DEFAULT 'full-time',
+      is_remote BOOLEAN DEFAULT false, application_url TEXT DEFAULT '',
+      is_active BOOLEAN DEFAULT true, created_at TIMESTAMP DEFAULT NOW())`);
+    console.log('✅ Industry tables ready');
+  } catch (e) { console.log('ℹ️ Industry init:', e.message); }
+}
+
+async function seedIndustryData() {
+  try {
+    const { rows: check } = await pool.query("SELECT COUNT(*) as c FROM industry_news");
+    if (parseInt(check[0].c) > 0) return;
+    await pool.query(`INSERT INTO industry_news (title, excerpt, category, source) VALUES
+      ('Animaxia atinge 1 milion de utilizatori', 'Platforma de streaming romaneasca a atins o piatra de hotar importanta.', 'platform', 'Animaxia News'),
+      ('NOILE TEHNOLOGII in streaming video pentru 2025', 'Tehnologiile AI revolutioneaza modul in care consumam continut video.', 'technology', 'TechCrunch'),
+      ('Parteneriat strategic Animaxia - Neon Database', 'Animaxia implementeaza baza de date scalabila pentru milioane de utilizatori.', 'partnership', 'Comunicat Oficial')`);
+    await pool.query(`INSERT INTO industry_companies (name, slug, description, location) VALUES
+      ('Animaxia','animaxia','Platforma de streaming premium din Romania','Bucuresti, Romania'),
+      ('Neon','neon','Serverless PostgreSQL platform','San Francisco, USA'),
+      ('Stripe','stripe','Plati online globale','San Francisco, USA')`);
+    await pool.query(`INSERT INTO industry_events (title, event_date, location, event_type, is_virtual) VALUES
+      ('Streaming Summit 2025','2025-09-15','Bucuresti','conference',false),
+      ('Tech Meetup: AI in Media','2025-10-01',NULL,'meetup',true)`);
+    await pool.query(`INSERT INTO industry_jobs (title, company, location, job_type) VALUES
+      ('Full Stack Developer','Animaxia','Bucuresti','full-time'),
+      ('UI/UX Designer','Animaxia','Remote','full-time'),
+      ('DevOps Engineer','Animaxia','Bucuresti','full-time')`);
+    console.log('✅ Industry seed data inserted');
+  } catch (e) { console.log('ℹ️ Industry seed:', e.message); }
+}
+
+// GET /api/industry/stats
+app.get('/api/industry/stats', async (req, res) => {
+  try {
+    const [companies, news, events, jobs] = await Promise.all([
+      pool.query('SELECT COUNT(*) as c FROM industry_companies'),
+      pool.query('SELECT COUNT(*) as c FROM industry_news'),
+      pool.query('SELECT COUNT(*) as c FROM industry_events WHERE event_date >= NOW() OR event_date IS NULL'),
+      pool.query('SELECT COUNT(*) as c FROM industry_jobs WHERE is_active = true')
+    ]);
+    res.json({ success: true, stats: {
+      companies: parseInt(companies.rows[0].c),
+      news: parseInt(news.rows[0].c),
+      upcomingEvents: parseInt(events.rows[0].c),
+      activeJobs: parseInt(jobs.rows[0].c)
+    }});
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/industry/news
+app.get('/api/industry/news', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 20;
+    const page = parseInt(req.query.page) || 1;
+    const offset = (page - 1) * limit;
+    const { rows: totalRows } = await pool.query('SELECT COUNT(*) as total FROM industry_news');
+    const total = parseInt(totalRows[0].total);
+    const { rows } = await pool.query('SELECT * FROM industry_news ORDER BY published_at DESC LIMIT $1 OFFSET $2', [limit, offset]);
+    res.json({ success: true, data: rows, total, page, pages: Math.ceil(total / limit) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/industry/companies
+app.get('/api/industry/companies', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM industry_companies WHERE is_active = true ORDER BY name');
+    res.json({ success: true, data: rows });
+  } catch (e) { res.json({ success: true, data: [] }); }
+});
+
+// POST /api/industry/companies
+app.post('/api/industry/companies', requireAuth, async (req, res) => {
+  try {
+    const { name, description, website, location } = req.body;
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+    await pool.query('INSERT INTO industry_companies (name,slug,description,website,location) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (slug) DO UPDATE SET description=$3', [name, slug, description||'', website||'', location||'']);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/industry/events
+app.get('/api/industry/events', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM industry_events ORDER BY event_date DESC NULLS LAST');
+    res.json({ success: true, data: rows });
+  } catch (e) { res.json({ success: true, data: [] }); }
+});
+
+// POST /api/industry/events
+app.post('/api/industry/events', requireAuth, async (req, res) => {
+  try {
+    const { title, description, event_date, location, event_type, is_virtual } = req.body;
+    await pool.query('INSERT INTO industry_events (title,description,event_date,location,event_type,is_virtual) VALUES ($1,$2,$3,$4,$5,$6)', [title, description||'', event_date||null, location||'', event_type||'conference', is_virtual||false]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/industry/jobs
+app.get('/api/industry/jobs', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM industry_jobs WHERE is_active = true ORDER BY created_at DESC');
+    res.json({ success: true, data: rows });
+  } catch (e) { res.json({ success: true, data: [] }); }
+});
+
+// ====== FRANCHISES MODULE ======
+async function initFranchiseTables() {
+  try {
+    await pool.query(`CREATE TABLE IF NOT EXISTS franchises (
+      id SERIAL PRIMARY KEY, name VARCHAR(300) NOT NULL,
+      slug VARCHAR(300) UNIQUE NOT NULL, description TEXT DEFAULT '',
+      logo_url TEXT DEFAULT '', banner_url TEXT DEFAULT '',
+      genre VARCHAR(100) DEFAULT '', content_count INTEGER DEFAULT 0,
+      total_views INTEGER DEFAULT 0, is_featured BOOLEAN DEFAULT false,
+      created_at TIMESTAMP DEFAULT NOW())`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS franchise_items (
+      id SERIAL PRIMARY KEY, franchise_id INTEGER REFERENCES franchises(id) ON DELETE CASCADE,
+      item_id VARCHAR(50) NOT NULL, sort_order INTEGER DEFAULT 0,
+      added_at TIMESTAMP DEFAULT NOW(), UNIQUE(franchise_id, item_id))`);
+    console.log('✅ Franchise tables ready');
+  } catch (e) { console.log('ℹ️ Franchise init:', e.message); }
+}
+
+async function seedFranchiseData() {
+  try {
+    const { rows: check } = await pool.query('SELECT COUNT(*) as c FROM franchises');
+    if (parseInt(check[0].c) > 0) return;
+    await pool.query(`INSERT INTO franchises (name,slug,description,genre,content_count,is_featured) VALUES
+      ('Universul Animaxia','universul-animaxia','Universul cinematografic Animaxia','Actiune,Animatie',5,true),
+      ('Seria Dincolo de Realitate','seria-dincolo-de-realitate','Seria SF/Horror','SF,Horror',4,true),
+      ('Aventuri Subacvatice','aventuri-subacvatice','Filme si seriale cu tematica submarina','Actiune,Aventuri',3,false)`);
+    console.log('✅ Franchise seed data inserted');
+  } catch (e) { console.log('ℹ️ Franchise seed:', e.message); }
+}
+
+// GET /api/franchises
+app.get('/api/franchises', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT f.*, (SELECT COUNT(*) FROM franchise_items fi WHERE fi.franchise_id = f.id) as item_count FROM franchises f ORDER BY f.is_featured DESC, f.content_count DESC');
+    res.json({ success: true, data: rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/franchises/:id
+app.get('/api/franchises/:id', async (req, res) => {
+  try {
+    const id = isNaN(req.params.id) ? -1 : parseInt(req.params.id);
+    const { rows: [franchise] } = await pool.query('SELECT * FROM franchises WHERE id = $1', [id]);
+    if (!franchise) return res.status(404).json({ error: 'Not found' });
+    const { rows: items } = await pool.query('SELECT fi.*, ci.title, ci.title_en, ci.year, ci.duration, ci.content_type, ci.bg_color, ci.genre, ci.rating, ci.match_rating FROM franchise_items fi JOIN content_items ci ON fi.item_id = ci.id WHERE fi.franchise_id = $1 ORDER BY fi.sort_order', [id]);
+    res.json({ success: true, data: { ...franchise, items } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ====== UPLOAD MODULE ======
+async function initUploadTables() {
+  try {
+    await pool.query(`CREATE TABLE IF NOT EXISTS user_uploads (
+      id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      title VARCHAR(300) NOT NULL, description TEXT DEFAULT '',
+      content_type VARCHAR(20) DEFAULT 'movie', year VARCHAR(10) DEFAULT '',
+      duration VARCHAR(50) DEFAULT '', rating VARCHAR(10) DEFAULT '',
+      video_url TEXT DEFAULT '', poster_url TEXT DEFAULT '',
+      file_size BIGINT DEFAULT 0, status VARCHAR(20) DEFAULT 'processing',
+      is_public BOOLEAN DEFAULT false, created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW())`);
+    console.log('✅ Upload tables ready');
+  } catch (e) { console.log('ℹ️ Upload init:', e.message); }
+}
+
+// POST /api/upload - upload new content
+const uploadUpload = multer({ storage: multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(__dirname, 'public', 'uploads');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const ext = file.originalname.split('.').pop();
+    cb(null, `upload-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`);
+  }
+}), limits: { fileSize: 500 * 1024 * 1024 }, fileFilter: (req, file, cb) => {
+  const allowedVideo = ['video/mp4','video/webm','video/ogg','video/quicktime'];
+  const allowedImage = ['image/jpeg','image/png','image/webp'];
+  cb(null, [...allowedVideo, ...allowedImage].includes(file.mimetype));
+}});
+
+app.post('/api/upload', requireAuth, uploadUpload.fields([{ name: 'video', maxCount: 1 }, { name: 'poster', maxCount: 1 }]), async (req, res) => {
+  try {
+    const { title, year, duration, rating, description, description_en, content_type } = req.body;
+    if (!title) return res.status(400).json({ error: 'Title required' });
+    const videoUrl = req.files?.video?.[0] ? '/uploads/' + req.files.video[0].filename : '';
+    const posterUrl = req.files?.poster?.[0] ? '/uploads/' + req.files.poster[0].filename : '';
+    const fileSize = req.files?.video?.[0]?.size || 0;
+    await pool.query('INSERT INTO user_uploads (user_id,title,description,content_type,year,duration,rating,video_url,poster_url,file_size,status,is_public) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)', [req.user.userId, title, description||'', content_type||'movie', year||'', duration||'', rating||'', videoUrl, posterUrl, fileSize, 'completed', true]);
+    res.json({ success: true, message: 'Content uploaded!' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/upload/list
+app.get('/api/upload/list', requireAuth, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = 20;
+    const offset = (page - 1) * limit;
+    const { rows: totalRows } = await pool.query('SELECT COUNT(*) as total FROM user_uploads WHERE user_id = $1', [req.user.userId]);
+    const total = parseInt(totalRows[0].total);
+    const { rows } = await pool.query('SELECT * FROM user_uploads WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3', [req.user.userId, limit, offset]);
+    res.json({ success: true, data: rows, total, page, pages: Math.ceil(total / limit) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /api/upload/:id
+app.delete('/api/upload/:id', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { rows: [upload] } = await pool.query('SELECT * FROM user_uploads WHERE id = $1 AND user_id = $2', [id, req.user.userId]);
+    if (!upload) return res.status(404).json({ error: 'Not found' });
+    if (upload.video_url) { try { fs.unlinkSync(path.join(__dirname, 'public', upload.video_url)); } catch {} }
+    if (upload.poster_url) { try { fs.unlinkSync(path.join(__dirname, 'public', upload.poster_url)); } catch {} }
+    await pool.query('DELETE FROM user_uploads WHERE id = $1', [id]);
+    res.json({ success: true, message: 'Deleted' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ====== CONTENT MODULE ======
+async function initContentModuleTables() {
+  try {
+    await pool.query(`CREATE TABLE IF NOT EXISTS content_metadata (
+      id SERIAL PRIMARY KEY, item_id VARCHAR(50) UNIQUE NOT NULL,
+      view_count INTEGER DEFAULT 0, like_count INTEGER DEFAULT 0,
+      share_count INTEGER DEFAULT 0, avg_watch_time NUMERIC(5,1) DEFAULT 0,
+      last_viewed_at TIMESTAMP, created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW())`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS content_tags (
+      id SERIAL PRIMARY KEY, item_id VARCHAR(50) NOT NULL,
+      tag VARCHAR(100) NOT NULL, UNIQUE(item_id, tag))`);
+    console.log('✅ Content module tables ready');
+  } catch (e) { console.log('ℹ️ Content module init:', e.message); }
+}
+
 
 // ====== SPA FALLBACK ======
 app.get('*', (req, res) => {

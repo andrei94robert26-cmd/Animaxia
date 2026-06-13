@@ -286,7 +286,8 @@
         'search-page': 'search-page-screen',
         'watch-history': 'watch-history-screen',
         'downloads': 'downloads-screen',
-        'admin': 'admin-screen'
+        'admin': 'admin-screen',
+        'billing': 'billing-screen'
       };
       const display = { 
         'login-screen': 'flex', 'register-screen': 'flex', 
@@ -296,7 +297,8 @@
         'my-list-screen': 'block', 'notifications-screen': 'block',
         'search-page-screen': 'block',
         'watch-history-screen': 'block', 'downloads-screen': 'block',
-        'admin-screen': 'block'
+        'admin-screen': 'block',
+        'billing-screen': 'block'
       };
       
       Object.values(map).forEach(id => {
@@ -311,13 +313,109 @@
     // ====== ROUTE NAVIGATION ======
     navTo(screen) {
       // Coming soon sections
-      const comingSoon = ['upload', 'industry', 'franchises', 'content', 'discover', 'addon', 'addon-marketplace', 'continent'];
+      const comingSoon = [];
       if (comingSoon.indexOf(screen) !== -1) {
         this.toast(appLang === 'ro' ? '🔜 Secțiune în dezvoltare' : '🔜 Section coming soon', 'info');
         return;
       }
 
-      if (screen === 'my-list') {
+      if (screen === 'upload') {
+        if (window.Upload) {
+          Upload.showPage();
+        } else {
+          this.toast(appLang === 'ro' ? 'Se încarcă modulul Upload...' : 'Loading Upload module...', 'info');
+          let retries = 0;
+          const retryInterval = setInterval(() => {
+            retries++;
+            if (window.Upload) { clearInterval(retryInterval); Upload.showPage(); }
+            else if (retries >= 15) { clearInterval(retryInterval); this.toast(appLang === 'ro' ? 'Eroare' : 'Error', 'error'); }
+          }, 200);
+        }
+      } else if (screen === 'industry') {
+        if (window.Industry) {
+          Industry.showPage();
+        } else {
+          this.toast(appLang === 'ro' ? 'Se încarcă Industry...' : 'Loading Industry...', 'info');
+          let retries = 0;
+          const retryInterval = setInterval(() => {
+            retries++;
+            if (window.Industry) { clearInterval(retryInterval); Industry.showPage(); }
+            else if (retries >= 15) { clearInterval(retryInterval); this.toast(appLang === 'ro' ? 'Eroare' : 'Error', 'error'); }
+          }, 200);
+        }
+      } else if (screen === 'franchises') {
+        if (window.Franchises) {
+          Franchises.showPage();
+        } else {
+          this.toast(appLang === 'ro' ? 'Se încarcă Francize...' : 'Loading Franchises...', 'info');
+          let retries = 0;
+          const retryInterval = setInterval(() => {
+            retries++;
+            if (window.Franchises) { clearInterval(retryInterval); Franchises.showPage(); }
+            else if (retries >= 15) { clearInterval(retryInterval); this.toast(appLang === 'ro' ? 'Eroare' : 'Error', 'error'); }
+          }, 200);
+        }
+      } else if (screen === 'discover') {
+        if (window.Discover) {
+          Discover.showPage();
+        } else {
+          this.toast(appLang === 'ro' ? 'Se încarcă Discover...' : 'Loading Discover...', 'info');
+          let retries = 0;
+          const retryInterval = setInterval(() => {
+            retries++;
+            if (window.Discover) { clearInterval(retryInterval); Discover.showPage(); }
+            else if (retries >= 15) { clearInterval(retryInterval); this.toast(appLang === 'ro' ? 'Eroare' : 'Error', 'error'); }
+          }, 200);
+        }
+      } else if (screen === 'addon') {
+        if (window.Addon) {
+          Addon.showPage();
+        } else {
+          this.toast(appLang === 'ro' ? 'Se încarcă Add-on...' : 'Loading Add-on...', 'info');
+          let retries = 0;
+          const retryInterval = setInterval(() => {
+            retries++;
+            if (window.Addon) { clearInterval(retryInterval); Addon.showPage(); }
+            else if (retries >= 15) { clearInterval(retryInterval); this.toast(appLang === 'ro' ? 'Eroare' : 'Error', 'error'); }
+          }, 200);
+        }
+      } else if (screen === 'addon-marketplace') {
+        if (window.AddonMarketplace) {
+          AddonMarketplace.showPage();
+        } else {
+          this.toast(appLang === 'ro' ? 'Se încarcă Marketplace...' : 'Loading Marketplace...', 'info');
+          let retries = 0;
+          const retryInterval = setInterval(() => {
+            retries++;
+            if (window.AddonMarketplace) { clearInterval(retryInterval); AddonMarketplace.showPage(); }
+            else if (retries >= 15) { clearInterval(retryInterval); this.toast(appLang === 'ro' ? 'Eroare' : 'Error', 'error'); }
+          }, 200);
+        }
+      } else if (screen === 'continent') {
+        if (window.Continent) {
+          Continent.showPage();
+        } else {
+          this.toast(appLang === 'ro' ? 'Se încarcă Continent...' : 'Loading Continent...', 'info');
+          let retries = 0;
+          const retryInterval = setInterval(() => {
+            retries++;
+            if (window.Continent) { clearInterval(retryInterval); Continent.showPage(); }
+            else if (retries >= 15) { clearInterval(retryInterval); this.toast(appLang === 'ro' ? 'Eroare' : 'Error', 'error'); }
+          }, 200);
+        }
+      } else if (screen === 'content') {
+        if (window.Content) {
+          Content.showPage();
+        } else {
+          this.toast(appLang === 'ro' ? 'Se încarcă Biblioteca de Conținut...' : 'Loading Content Library...', 'info');
+          let retries = 0;
+          const retryInterval = setInterval(() => {
+            retries++;
+            if (window.Content) { clearInterval(retryInterval); Content.showPage(); }
+            else if (retries >= 15) { clearInterval(retryInterval); this.toast(appLang === 'ro' ? 'Eroare' : 'Error', 'error'); }
+          }, 200);
+        }
+      } else if (screen === 'my-list') {
         this.renderMyList();
         this.showScreen('my-list');
       } else if (screen === 'notifications') {
@@ -336,6 +434,11 @@
       } else if (screen === 'admin') {
         this.adminRefresh();
         this.showScreen('admin');
+      } else if (screen === 'billing') {
+        this.showBilling();
+        this.showScreen('billing');
+      } else if (screen === 'settings') {
+        this.showScreen('settings');
       } else {
         this.showScreen('app');
         this.nav(screen);
@@ -2745,7 +2848,90 @@
       } catch { this.toast('Error', 'error'); }
     },
 
-    // ====== ADMIN DASHBOARD (NEW) ======
+
+    // ====== BILLING / SUBSCRIPTION ======
+    async showBilling() {
+      const container = document.getElementById('billingContent');
+      if (!container) return;
+      const lang = window.appLang || 'ro';
+      container.innerHTML = '<div class="industry-empty"><i class="fas fa-spinner fa-spin"></i><h4>' + (lang === 'ro' ? 'Se incarca...' : 'Loading...') + '</h4></div>';
+      try {
+        const [plansRes, currentRes, historyRes] = await Promise.all([
+          fetch('/api/billing/plans'),
+          fetch('/api/billing/current', { headers: { 'Authorization': 'Bearer ' + localStorage.getItem('animaxia_token') } }),
+          fetch('/api/billing/history', { headers: { 'Authorization': 'Bearer ' + localStorage.getItem('animaxia_token') } })
+        ]);
+        const plans = (await plansRes.json()).data || [];
+        const current = (await currentRes.json()).data || {};
+        const history = (await historyRes.json()).data || [];
+
+        let html = '';
+        if (current.plan) {
+          html += '<div class="billing-current"><i class="fas fa-check-circle"></i><div><strong>' +
+            (lang === 'ro' ? 'Plan actual:' : 'Current plan:') + '</strong> ' + current.plan.name +
+            ' &mdash; ' + (current.plan.price === 0 ? (lang === 'ro' ? 'Gratuit' : 'Free') : current.plan.price + ' lei/' + (lang === 'ro' ? 'luna' : 'month')) + '</div></div>';
+        }
+
+        html += '<div class="billing-plan-grid">' + plans.map(function(p) {
+          var featured = p.name === 'Premium' ? ' featured' : '';
+          var isCurrent = current.plan && current.plan.name === p.name;
+          return '<div class="billing-plan-card' + featured + '">' +
+            '<div class="billing-plan-name">' + p.name + '</div>' +
+            '<div class="billing-plan-price">' + (p.price === 0 ? (lang === 'ro' ? 'Gratuit' : 'Free') : p.price + '<span style="font-size:14px;color:var(--text-tertiary);font-weight:400;"> lei</span>') + '</div>' +
+            '<div class="billing-plan-period">/' + (lang === 'ro' ? 'luna' : 'month') + '</div>' +
+            '<ul class="billing-plan-features">' + (p.features || []).map(function(f) {
+              return '<li><i class="fas fa-check" style="color:var(--green);"></i> ' + f + '</li>';
+            }).join('') + '</ul>' +
+            (isCurrent ? '<button class="btn btn-secondary" disabled><i class="fas fa-check"></i> ' +
+            (lang === 'ro' ? 'Actual' : 'Current') + '</button>' :
+            (p.price > 0 ? '<button class="btn btn-primary subscribe-btn" data-plan="' + p.id + '"><i class="fas fa-credit-card"></i> ' +
+            (lang === 'ro' ? 'Aboneaza-te' : 'Subscribe') + '</button>' :
+            '<button class="btn btn-secondary" disabled>' + (lang === 'ro' ? 'Gratuit' : 'Free') + '</button>')) +
+            '</div>';
+        }).join('') + '</div>';
+
+        html += '<div class="billing-history"><h3><i class="fas fa-receipt"></i> ' +
+          (lang === 'ro' ? 'Istoric plati' : 'Payment History') + '</h3>';
+        if (history.length === 0) {
+          html += '<div class="billing-empty"><i class="fas fa-receipt"></i><p>' +
+            (lang === 'ro' ? 'Nicio plata inregistrata' : 'No payment history') + '</p></div>';
+        } else {
+          html += '<table class="billing-history-table"><thead><tr><th>' +
+            (lang === 'ro' ? 'Data' : 'Date') + '</th><th>' +
+            (lang === 'ro' ? 'Descriere' : 'Description') + '</th><th>' +
+            (lang === 'ro' ? 'Suma' : 'Amount') + '</th><th>' +
+            (lang === 'ro' ? 'Status' : 'Status') + '</th></tr></thead><tbody>' +
+            history.map(function(h) {
+              var statusClass = h.status === 'paid' ? 'paid' : (h.status === 'pending' ? 'pending' : 'failed');
+              return '<tr><td>' + new Date(h.created_at).toLocaleDateString() + '</td><td>' + (h.description || '-') + '</td><td>' + (h.amount ? h.amount + ' lei' : '-') + '</td><td><span class="billing-status ' + statusClass + '">' + (h.status === 'paid' ? (lang === 'ro' ? 'Platit' : 'Paid') : h.status === 'pending' ? (lang === 'ro' ? 'In asteptare' : 'Pending') : (lang === 'ro' ? 'Esuat' : 'Failed')) + '</span></td></tr>';
+            }).join('') + '</tbody></table>';
+        }
+        html += '</div>';
+
+        container.innerHTML = html;
+
+        container.querySelectorAll('.subscribe-btn').forEach(function(btn) {
+          btn.addEventListener('click', async function() {
+            var planId = parseInt(btn.dataset.plan);
+            try {
+              var res = await fetch('/api/billing/subscribe', {
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('animaxia_token') },
+                body: JSON.stringify({ planId: planId })
+              });
+              var data = await res.json();
+              if (data.success) {
+                App.toast(data.message || (lang === 'ro' ? 'Abonament activat!' : 'Subscription activated!'), 'success');
+                App.showBilling();
+              } else {
+                App.toast(data.error || 'Error', 'error');
+              }
+            } catch { App.toast('Error', 'error'); }
+          });
+        });
+      } catch { container.innerHTML = '<div class="industry-error"><i class="fas fa-exclamation-triangle"></i></div>'; }
+    },
+
+        // ====== ADMIN DASHBOARD (NEW) ======
     async adminRefresh() {
       // Use event delegation on admin body to avoid stacking listeners
       const adminBody = document.querySelector('.admin-body');
@@ -3279,7 +3465,7 @@
       const t = {
         home: () => window.scrollTo({ top: 0, behavior: 'smooth' }),
         trending: () => document.querySelector('[data-category="tendinte"]')?.scrollIntoView({ behavior: 'smooth' }),
-        movies: () => document.querySelector('[data-category="tendinte"]')?.scrollIntoView({ behavior: 'smooth' }),
+        movies: () => document.querySelector('[data-category="filme"]')?.scrollIntoView({ behavior: 'smooth' }),
         series: () => document.querySelector('[data-category="seriale"]')?.scrollIntoView({ behavior: 'smooth' }),
         'my-list': () => this.renderMyList(),
         live: () => document.querySelector('#liveStrip')?.scrollIntoView({ behavior: 'smooth' }),
@@ -3622,7 +3808,7 @@
             'watch-history': () => { whPage = 1; this.renderWatchHistory(); this.showScreen('watch-history'); },
             'downloads': () => { this.renderDownloads(); this.showScreen('downloads'); },
             'admin': () => { this.adminRefresh(); this.showScreen('admin'); },
-            'billing': () => this.toast(appLang === 'ro' ? 'Funcționalitate în dezvoltare' : 'Feature in development', 'info'),
+            'billing': () => { this.navTo('billing'); },
           };
           const fn = actions[action];
           fn ? fn() : this.toast(appLang === 'ro' ? 'Funcționalitate în dezvoltare' : 'Feature in development', 'info');
@@ -3631,10 +3817,10 @@
 
       // Navigation
       this.els.navItems?.forEach(item => {
-        item.addEventListener('click', (e) => { e.preventDefault(); const s = item.querySelector('a')?.dataset.section; if (s === 'my-list') this.navTo('my-list'); else this.nav(s); });
+        item.addEventListener('click', (e) => { e.preventDefault(); App.closeSidebar(); const s = item.querySelector('a')?.dataset.section; if (s === 'my-list') this.navTo('my-list'); else { this.showScreen('app'); this.nav(s); } });
       });
       this.els.mobileNav?.forEach(item => {
-        item.addEventListener('click', (e) => { e.preventDefault(); const s = item.dataset.section; if (s === 'my-list') this.navTo('my-list'); else this.nav(s); });
+        item.addEventListener('click', (e) => { e.preventDefault(); App.closeSidebar(); const s = item.dataset.section; if (s === 'my-list') this.navTo('my-list'); else { this.showScreen('app'); this.nav(s); } });
       });
 
       // Genre filter
