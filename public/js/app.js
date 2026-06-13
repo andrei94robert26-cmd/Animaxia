@@ -319,8 +319,7 @@
         const script = document.createElement('script');
         script.src = scriptPath;
         script.onload = () => {
-          // Wait a tiny bit for the IIFE to execute
-          setTimeout(() => resolve(!!window[moduleName]), 100);
+          // Script fetched OK - let retryInterval detect the module
         };
         script.onerror = () => { clearInterval(retryInterval); resolve(false); };
         document.body.appendChild(script);
