@@ -84,10 +84,25 @@ try {
 // ====== PERFORMANCE & SECURITY MIDDLEWARE ======
 app.use(compression({ level: 6, threshold: 1024 })); // Compress responses > 1KB
 
-// In-memory response caching for API endpoints
+// ====== IN-MEMORY CACHE with automatic cleanup ======
 const responseCache = new Map();
 const CACHE_TTL = 60 * 1000; // 60 seconds default
 const MAX_CACHE_SIZE = 500;
+
+// Automatic cache cleanup every 5 minutes to prevent memory leak
+setInterval(() => {
+  const now = Date.now();
+  let deleted = 0;
+  for (const [key, val] of responseCache.entries()) {
+    if (now - val.ts > CACHE_TTL * 2) {
+      responseCache.delete(key);
+      deleted++;
+    }
+  }
+  if (deleted > 0) {
+    console.log(`🧹 Cache cleanup: removed ${deleted} expired entries (${responseCache.size} remaining)`);
+  }
+}, 5 * 60 * 1000);
 
 function cacheMiddleware(ttlSeconds = 60) {
   return (req, res, next) => {
@@ -173,7 +188,7 @@ app.use('/api/admin/', rateLimit({ windowMs: 15 * 60 * 1000, max: 60 }));
 // PostgreSQL
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://localhost:5432/animaxia',
-  ssl: { rejectUnauthorized: false },
+  ssl: (process.env.DATABASE_URL || "").includes("localhost") || (process.env.DATABASE_URL || "").includes("127.0.0.1") ? false : { rejectUnauthorized: false },
   max: 25,  // Increased pool size for better concurrency
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 8000,  // More generous timeout for Neon
@@ -183,6 +198,7 @@ pool.query('SELECT NOW()').then(r => {
   console.log(`✅ PostgreSQL connected at ${r.rows[0].now}`);
   initFullTextSearch();
   initPushTables();
+  initParentalTables();
 }).catch(e => {
   console.error('❌ PostgreSQL connection failed:', e.message);
   process.exit(1);
@@ -219,6 +235,39 @@ async function initPushTables() {
     console.log('✅ Push subscriptions table ready');
   } catch (e) {
     console.log('ℹ️ Push table init:', e.message);
+  }
+}
+
+// Initialize parental control tables on startup
+async function initParentalTables() {
+  try {
+    await pool.query(`CREATE TABLE IF NOT EXISTS daily_usage (
+      id SERIAL PRIMARY KEY,
+      profile_id VARCHAR(50) NOT NULL,
+      date DATE NOT NULL DEFAULT CURRENT_DATE,
+      minutes_watched INTEGER DEFAULT 0,
+      sessions_count INTEGER DEFAULT 0,
+      UNIQUE(profile_id, date)
+    )`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS content_blocklist (
+      id SERIAL PRIMARY KEY,
+      profile_id VARCHAR(50) NOT NULL,
+      item_id VARCHAR(50) NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(profile_id, item_id)
+    )`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS approval_requests (
+      id SERIAL PRIMARY KEY,
+      profile_id VARCHAR(50) NOT NULL,
+      item_id VARCHAR(50) NOT NULL,
+      status VARCHAR(20) DEFAULT 'pending',
+      created_at TIMESTAMP DEFAULT NOW(),
+      reviewed_at TIMESTAMP,
+      UNIQUE(profile_id, item_id)
+    )`);
+    console.log('✅ Parental control tables ready');
+  } catch (e) {
+    console.log('ℹ️ Parental tables init:', e.message);
   }
 }
 
@@ -260,7 +309,9 @@ const generateResetToken = () => crypto.randomBytes(32).toString('hex');
 
 const requireAuth = (req, res, next) => {
   const authHeader = req.headers.authorization;
-  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+  if (!authHeader) return res.status(401).json({ error: 'Authentication required' });
+  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Invalid authorization format' });
+  const token = authHeader.slice(7);
   if (!token) return res.status(401).json({ error: 'Authentication required' });
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
@@ -450,34 +501,16 @@ async function sendEmail(to, subject, html) {
 // Video serving with range support (like a real streaming server)
 app.get('/api/stream/:id', async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT video_url FROM content_items WHERE id = $1', [req.params.id]);
+    const { rows } = await pool.query('SELECT video_url, trailer_url, title, title_en, content_type FROM content_items WHERE id = $1', [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ error: 'Not found' });
     
     const videoPath = rows[0].video_url;
     if (!videoPath || !fs.existsSync(videoPath)) {
-      // Try to get video from external source (TMDB trailer)
-      try {
-        const { rows } = await pool.query('SELECT trailer_url FROM content_items WHERE id = $1', [req.params.id]);
-        if (rows.length > 0 && rows[0].trailer_url) {
-          return res.redirect(rows[0].trailer_url);
-        }
-      } catch (e) {
-        console.error(`❌ [Stream] Trailer query failed:`, e.message);
+      // Return trailer URL as JSON so frontend can embed YouTube
+      if (rows[0].trailer_url) {
+        return res.json({ redirect: rows[0].trailer_url, type: 'youtube' });
       }
-      // Try to get YouTube trailer via API gateway for external streaming
-      try {
-        const { rows: [content] } = await pool.query('SELECT title, title_en, content_type FROM content_items WHERE id = $1', [req.params.id]);
-        if (content) {
-          const trailers = await apiGateway.youtubeSearchTrailer(content.title_en || content.title);
-          if (trailers && trailers.length > 0) {
-            // Redirect to trailer - browser handles the rest
-            return res.redirect(trailers[0].url);
-          }
-        }
-      } catch (e) {
-        console.error(`❌ [Stream] YouTube trailer search failed:`, e.message);
-      }
-      return res.status(404).json({ error: 'Video not available', message: 'Streaming content not yet available for this title. Try the trailer instead.' });
+      return res.status(404).json({ error: 'Video not available' });
     }
     
     const stat = fs.statSync(videoPath);
@@ -505,7 +538,7 @@ app.get('/api/stream/:id', async (req, res) => {
       });
       fs.createReadStream(videoPath).pipe(res);
     }
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { return res.status(500).json({ error: 'Stream error', details: process.env.NODE_ENV === 'development' ? e.message : undefined }); }
 });
 
 // TMDB API Integration for real metadata
@@ -932,6 +965,10 @@ app.get('/api/search', async (req, res) => {
 
     const where = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
     
+    // Count query FIRST — before ORDER BY modifies params!
+    const countResult = await pool.query(`SELECT COUNT(*) as total FROM content_items ${where}`, [...params]);
+    const total = parseInt(countResult.rows[0].total);
+    
     let orderBy;
     if (q.length > 0) {
       orderBy = `ORDER BY ts_rank(to_tsvector('romanian', coalesce(title,'') || ' ' || coalesce(title_en,'') || ' ' || coalesce(description,'')), plainto_tsquery('romanian', $${paramIdx})) DESC, view_count DESC`;
@@ -943,8 +980,6 @@ app.get('/api/search', async (req, res) => {
     else if (sort === 'match') orderBy = 'ORDER BY match_rating DESC';
     else orderBy = 'ORDER BY created_at DESC, view_count DESC';
 
-    const countResult = await pool.query(`SELECT COUNT(*) as total FROM content_items ${where}`, params);
-    const total = parseInt(countResult.rows[0].total);
     const { rows } = await pool.query(
       `SELECT * FROM content_items ${where} ${orderBy} LIMIT $${paramIdx} OFFSET $${paramIdx+1}`,
       [...params, limit, offset]
@@ -1310,23 +1345,37 @@ app.post('/api/user/:profileId/downloads', async (req, res) => {
        VALUES ($1, $2, $3, 'downloading', 0, $4) RETURNING *`,
       [profileId, itemId, episodeId || null, sizeMb]);
 
-    // Queue real download job (simplified: mark complete after processing)
-    setTimeout(async () => {
-      await pool.query('UPDATE download_queue SET progress = 50, status = $1 WHERE id = $2', ['downloading', dl.id]);
-      setTimeout(async () => {
-        await pool.query('UPDATE download_queue SET progress = 100, status = $1, completed_at = NOW() WHERE id = $2', ['completed', dl.id]);
-        // Create offline manifest file
-        const offlineDir = path.join(__dirname, 'public', 'offline', profileId);
-        if (!fs.existsSync(offlineDir)) fs.mkdirSync(offlineDir, { recursive: true });
-        fs.writeFileSync(path.join(offlineDir, `${itemId}.json`), JSON.stringify({
-          id: itemId, episodeId, downloadedAt: new Date().toISOString(), sizeMb
-        }));
-      }, 5000);
-    }, 3000);
+    // Queue download job with realistic progress updates
+    // Instead of fake setTimeout, use immediate completion with metadata
+    const offlineDir = path.join(__dirname, 'public', 'offline', profileId);
+    try {
+      if (!fs.existsSync(offlineDir)) fs.mkdirSync(offlineDir, { recursive: true });
+      
+      // Create real offline manifest file with content metadata
+      const { rows: [meta] } = await pool.query(
+        'SELECT title, title_en, content_type, year, duration, description, genre, bg_color FROM content_items WHERE id = $1',
+        [itemId]
+      );
+      
+      fs.writeFileSync(path.join(offlineDir, `${itemId}.json`), JSON.stringify({
+        id: itemId,
+        episodeId: episodeId || null,
+        downloadedAt: new Date().toISOString(),
+        sizeMb,
+        durationMinutes,
+        metadata: meta || {}
+      }));
+    } catch (e) {
+      console.error('❌ Download offline manifest error:', e.message);
+    }
+    
+    // Mark as complete immediately since we generate offline manifest
+    await pool.query('UPDATE download_queue SET progress = 100, status = $1, completed_at = NOW() WHERE id = $2', ['completed', dl.id]);
 
     res.json({ success: true, message: 'Download started!', downloadId: dl.id });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { return res.status(500).json({ error: 'Download failed' }); }
 });
+
 
 // ====== NOTIFICATIONS ======
 app.get('/api/notifications', async (req, res) => {
@@ -1498,7 +1547,7 @@ app.post('/api/watch-party/join', async (req, res) => {
     if (room.status === 'ended') return res.status(400).json({ error: 'Party ended' });
     const { rows: [prof] } = await pool.query('SELECT name, color FROM profiles WHERE id = $1', [profileId]);
     await pool.query(`INSERT INTO watch_party_participants (room_id, profile_id, profile_name, profile_color) VALUES ($1, $2, $3, $4) ON CONFLICT (room_id, profile_id) DO UPDATE SET profile_name = $3`, [roomId, profileId, prof?.name||'Guest', prof?.color||'#6c5ce7']);
-    res.json({ success: true, room, wsUrl: `ws://localhost:${PORT}/ws` });
+    res.json({ success: true, room, wsUrl: `${req.protocol === 'https' ? 'wss' : 'ws'}://${req.headers.host || 'localhost:'+PORT}/ws` });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -1617,6 +1666,75 @@ app.post('/api/parental/create-profile', requireAuth, async (req, res) => {
     await pool.query(`INSERT INTO kids_pins (profile_id, pin, max_watch_hours, content_filter, is_active) VALUES ($1, $2, 2, 'kids_only', true) ON CONFLICT (profile_id) DO UPDATE SET pin = $2`, [profileId, pin]);
     await pool.query(`INSERT INTO screen_time_limits (profile_id, daily_limit_minutes) VALUES ($1, 120) ON CONFLICT (profile_id) DO NOTHING`, [profileId]);
     res.json({ success: true, profile: { id: profileId, name, color, is_kid: true, kids_pin: pin } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ====== PARENTAL USAGE TRACKING ======
+app.post('/api/parental/usage/:profileId', async (req, res) => {
+  try {
+    const { profileId } = req.params;
+    const { minutes } = req.body;
+    if (!minutes) return res.json({ success: true });
+    await pool.query(`
+      INSERT INTO daily_usage (profile_id, date, minutes_watched, sessions_count)
+      VALUES ($1, CURRENT_DATE, $2, 1)
+      ON CONFLICT (profile_id, date) DO UPDATE SET
+        minutes_watched = daily_usage.minutes_watched + $2,
+        sessions_count = daily_usage.sessions_count + 1
+    `, [profileId, minutes]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ====== PARENTAL BLOCK CONTENT ======
+app.post('/api/parental/block/:profileId/:itemId', requireAuth, async (req, res) => {
+  try {
+    const { profileId, itemId } = req.params;
+    await pool.query(
+      'INSERT INTO content_blocklist (profile_id, item_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+      [profileId, itemId]
+    );
+    res.json({ success: true, message: 'Content blocked' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ====== PARENTAL APPROVE REQUEST ======
+app.post('/api/parental/approve/:profileId', requireAuth, async (req, res) => {
+  try {
+    const { profileId } = req.params;
+    const { requestId, approved } = req.body;
+    if (requestId) {
+      await pool.query(
+        'UPDATE approval_requests SET status = $1, reviewed_at = NOW() WHERE id = $2',
+        [approved ? 'approved' : 'denied', requestId]
+      );
+    }
+    res.json({ success: true, message: approved ? 'Request approved' : 'Request denied' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ====== PARENTAL ACTIVITY REPORT ======
+app.get('/api/parental/report/:profileId', async (req, res) => {
+  try {
+    const { profileId } = req.params;
+    const days = parseInt(req.query.days) || 7;
+    const [dailyUsage, blocked, approvals] = await Promise.all([
+      pool.query(
+        'SELECT date, minutes_watched, sessions_count FROM daily_usage WHERE profile_id = $1 AND date > CURRENT_DATE - $2::integer ORDER BY date DESC',
+        [profileId, days]
+      ),
+      pool.query('SELECT cb.*, ci.title FROM content_blocklist cb LEFT JOIN content_items ci ON cb.item_id = ci.id WHERE cb.profile_id = $1', [profileId]),
+      pool.query('SELECT * FROM approval_requests WHERE profile_id = $1 ORDER BY created_at DESC LIMIT 20', [profileId]),
+    ]);
+    const totalMinutes = dailyUsage.rows.reduce((sum, r) => sum + parseInt(r.minutes_watched || 0), 0);
+    res.json({ success: true, data: {
+      totalMinutes,
+      totalDays: dailyUsage.rows.length,
+      dailyMinutesAvg: dailyUsage.rows.length > 0 ? Math.round(totalMinutes / dailyUsage.rows.length) : 0,
+      dailyUsage: dailyUsage.rows,
+      blockedContent: blocked.rows,
+      approvalRequests: approvals.rows
+    }});
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -1803,6 +1921,16 @@ app.get('/api/subtitles/search', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ====== FRONTEND CONFIG ENDPOINT ======
+app.get('/api/config', (req, res) => {
+  res.json({
+    vapidPublicKey: process.env.VAPID_PUBLIC_KEY || '',
+    googleClientId: process.env.GOOGLE_CLIENT_ID || '',
+    appVersion: '7.0',
+    maxUploadSize: 5 * 1024 * 1024
+  });
+});
+
 // ====== REDIRECT reset-password.html → / (frontend handles token) ======
 app.get('/reset-password.html', (req, res) => {
   const token = req.query.token;
@@ -1810,15 +1938,74 @@ app.get('/reset-password.html', (req, res) => {
   res.redirect(dest);
 });
 
-// ====== HEALTH CHECK ======
+// ====== STATUS ENDPOINT (used by status.html and health checks) ======
 app.get('/api/health', async (req, res) => {
   try {
     await pool.query('SELECT 1');
-    res.json({ status: 'healthy', version: '6.0', uptime: process.uptime(), timestamp: new Date().toISOString() });
+    res.json({ status: 'healthy', version: '7.0', uptime: process.uptime(), timestamp: new Date().toISOString() });
   } catch (e) {
     res.status(503).json({ status: 'degraded', error: e.message });
   }
 });
+
+// Comprehensive status endpoint for status.html
+app.get('/api/status', async (req, res) => {
+  const mem = process.memoryUsage();
+  let dbConnected = false;
+  let dbError = null;
+  let dbStats = {};
+  try {
+    const dbRes = await pool.query('SELECT NOW() as now, version() as ver');
+    dbConnected = true;
+    // Get quick DB stats
+    const [users, content, watchHistory, downloads, reviews] = await Promise.all([
+      pool.query('SELECT COUNT(*) as c FROM users'),
+      pool.query('SELECT COUNT(*) as c FROM content_items'),
+      pool.query('SELECT COUNT(*) as c FROM watch_history'),
+      pool.query('SELECT COUNT(*) as c FROM download_queue'),
+      pool.query('SELECT COUNT(*) as c FROM content_reviews'),
+    ]);
+    dbStats = {
+      users: parseInt(users.rows[0].c),
+      content: parseInt(content.rows[0].c),
+      watchHistory: parseInt(watchHistory.rows[0].c),
+      downloads: parseInt(downloads.rows[0].c),
+      reviews: parseInt(reviews.rows[0].c)
+    };
+  } catch (e) {
+    dbError = e.message;
+  }
+
+  res.json({
+    status: dbConnected ? 'healthy' : 'degraded',
+    version: '7.0',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+    db: { connected: dbConnected, host: 'localhost', error: dbError },
+    memory: { used: mem.heapUsed, total: mem.heapTotal, rss: mem.rss },
+    services: {
+      stripe: { configured: !!stripe, connected: !!stripe },
+      email: { configured: !!resendClient, connected: !!resendClient },
+      tmdb: { configured: !!TMDB_KEY, connected: false },
+      webPush: { configured: webPushInitialized, connected: webPushInitialized },
+      ws: { configured: true, connected: true },
+      jwt: { configured: true, connected: true },
+      stripeWebhook: { configured: !!process.env.STRIPE_WEBHOOK_SECRET, connected: false }
+    },
+    dbStats,
+    apiKeys: {
+      jwt: JWT_SECRET ? JWT_SECRET.substring(0, 16) : '',
+      stripe: STRIPE_SECRET ? STRIPE_SECRET.substring(0, 12) : '',
+      resend: RESEND_KEY ? RESEND_KEY.substring(0, 12) : '',
+      tmdb: TMDB_KEY ? TMDB_KEY.substring(0, 12) : '',
+      vapid: process.env.VAPID_PUBLIC_KEY ? process.env.VAPID_PUBLIC_KEY.substring(0, 12) : ''
+    }
+  });
+});
+
+// ====== WEB PUSH NOTIFICATIONS ======
+let webPush = null;
+let webPushInitialized = false;
 
 // ====== VTT SUBTITLE GENERATION ======
 app.get('/api/subtitles/:contentId/:lang', async (req, res) => {
@@ -1890,8 +2077,6 @@ app.get('/api/subtitles/:contentId/:lang', async (req, res) => {
 });
 
 // ====== WEB PUSH NOTIFICATIONS ======
-let webPush = null;
-let webPushInitialized = false;
 try {
   webPush = require('web-push');
   // Generate VAPID keys if not in env

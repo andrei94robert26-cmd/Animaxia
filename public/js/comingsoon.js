@@ -37,10 +37,10 @@
               match: item.vote_average ? `${Math.round(item.vote_average * 10)}%` : '90%'
             };
           });
-          console.log(`✅ ComingSoon: Loaded ${this.upcoming.length} items from TMDB`);
+          // DEBUG: console.log(`✅ ComingSoon: Loaded ${this.upcoming.length} items from TMDB`);
         }
       } catch (e) {
-        console.warn('ComingSoon: TMDB unavailable, trying backup...');
+        // if (window.__DEBUG) console.warn('ComingSoon: TMDB unavailable, trying backup...');
       }
       
       // Try another source if empty

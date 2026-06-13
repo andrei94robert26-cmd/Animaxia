@@ -72,7 +72,7 @@ const AnimaxiaData = {
         }
       }
     } catch (e) {
-      console.warn('Session restore failed:', e.message);
+      // if (window.__DEBUG) console.warn('Session restore failed:', e.message);
     }
   },
 
@@ -90,7 +90,7 @@ const AnimaxiaData = {
         return;
       }
     } catch (e) {
-      console.warn('Backend content unavailable, loading from TMDB:', e.message);
+      // if (window.__DEBUG) console.warn('Backend content unavailable, loading from TMDB:', e.message);
     }
 
     // Fallback: load from TMDB API (real, live data)
@@ -263,7 +263,7 @@ const AnimaxiaData = {
       };
 
       window.__content = this._cache;
-      console.log(`✅ Animaxia: Loaded ${categories.length} categories, ${featured.length} featured from TMDB`);
+      // DEBUG: console.log(`✅ Animaxia: Loaded ${categories.length} categories, ${featured.length} featured from TMDB`);
 
     } catch (e) {
       console.error('❌ TMDB load failed:', e);

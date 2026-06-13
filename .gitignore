@@ -1,31 +1,42 @@
-# Dependencies
+# Node.js
 node_modules/
-
-# Environment variables - CONTAIN REAL API KEYS, NEVER COMMIT
-.env
-
-# Logs
-*.log
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# OS
-.DS_Store
-Thumbs.db
+# Environment variables
+.env
+.env.local
+.env.*.local
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+email.log
+*.log
 
 # Uploads
-public/avatars/
-public/offline/
+public/avatars/*
+public/offline/*
+!public/avatars/.gitkeep
+!public/offline/.gitkeep
 
 # Database
-*.sqlite
-*.sqlite3
+db/*.sql
 
-# Temp
-tmp/
-temp/
+# Coverage
+coverage/
+
+# Dependencies
+package-lock.json
+yarn.lock
+pnpm-lock.yaml

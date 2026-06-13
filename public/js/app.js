@@ -108,7 +108,7 @@
   }// ====== PUSH NOTIFICATIONS ======
   async function subscribeToPush() {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-      console.log('Push notifications not supported');
+      if (window.__DEBUG) console.log('Push notifications not supported');
       return;
     }
     try {
@@ -117,7 +117,7 @@
       
       // Always use toJSON() which returns the correct format regardless
       if (!subscription) {
-        const vapidPublicKey = 'BPp-FyFoP2PX9Jv9c5eG3XJ_qHzFS8KXH6d7vjYGgqJ5UXRQJGiYjFqHJh-ZFYInDHAobT2zU5c_rHbqtsGFZBU';
+        const vapidPublicKey = window.__VAPID_PUBLIC_KEY || '';
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: vapidPublicKey
@@ -133,7 +133,7 @@
       });
       console.log('✅ Push notifications subscribed');
     } catch (e) {
-      console.log('Push subscription failed:', e.message);
+      if (window.__DEBUG) console.log('Push subscription failed:', e.message);
     }
   }
 
@@ -200,6 +200,7 @@
         this.bind();
         this.handleResetToken();
         this.applyLanguage(appLang, false);
+        this.fetchConfig();
       } catch (e) {
         console.warn('App init (phase 1) warning:', e);
       }
@@ -341,6 +342,23 @@
       }
     },
 
+    // Fetch VAPID public key and Google Client ID from server config
+    async fetchConfig() {
+      try {
+        const res = await fetch('/api/config');
+        const data = await res.json();
+        if (data.vapidPublicKey) {
+          window.__VAPID_PUBLIC_KEY = data.vapidPublicKey;
+        }
+        if (data.googleClientId) {
+          window.__GOOGLE_CLIENT_ID = data.googleClientId;
+        }
+      } catch (e) {
+        // Config fetch is non-critical, continue with fallback values
+        console.log('ℹ️ Could not fetch config, using fallback values');
+      }
+    },
+
     // ====== AUTH ======
     async login(e) {
       e.preventDefault();
@@ -420,7 +438,7 @@
     _googleInitialized: false,
     // Google OAuth Client ID - configure in .env or replace with your own
     // Get one at https://console.cloud.google.com/apis/credentials
-    _googleClientId: window.__GOOGLE_CLIENT_ID || localStorage.getItem('google_client_id') || '139271054187-buc551hfaid5e5g7563326hp9i9d5jf5.apps.googleusercontent.com',
+    _googleClientId: window.__GOOGLE_CLIENT_ID || '',
 
     async _initGoogleGIS() {
       if (this._googleInitialized) return true;

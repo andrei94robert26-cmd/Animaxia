@@ -3,12 +3,13 @@
  * Screen time limits, content restrictions, activity reports
  */
 
+require('dotenv').config();
 const { Pool } = require('pg');
 
 const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://localhost:5432/animaxia';
 
 async function migrate() {
-  const pool = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } });
+  const pool = new Pool({ connectionString: DATABASE_URL, ssl: DATABASE_URL.includes('localhost') || DATABASE_URL.includes('127.0.0.1') ? false : { rejectUnauthorized: false } });
   console.log('🚀 Parental Controls Migration...\n');
 
   try {
