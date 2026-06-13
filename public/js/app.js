@@ -311,6 +311,35 @@
     },
 
     // ====== ROUTE NAVIGATION ======
+    // Dynamically load a module script and retry until available
+    async loadModuleScript(screen, moduleName, scriptPath) {
+      return new Promise((resolve) => {
+        if (window[moduleName]) { resolve(true); return; }
+        // Try to load the script dynamically
+        const script = document.createElement('script');
+        script.src = scriptPath;
+        script.onload = () => {
+          // Wait a tiny bit for the IIFE to execute
+          setTimeout(() => resolve(!!window[moduleName]), 100);
+        };
+        script.onerror = () => { clearInterval(retryInterval); resolve(false); };
+        document.body.appendChild(script);
+        
+        // Also keep retrying in case the module registers with a different name
+        let retries = 0;
+        const retryInterval = setInterval(() => {
+          retries++;
+          if (window[moduleName]) { 
+            clearInterval(retryInterval); 
+            resolve(true); 
+          } else if (retries >= 30) { 
+            clearInterval(retryInterval); 
+            resolve(false); 
+          }
+        }, 200);
+      });
+    },
+
     navTo(screen) {
       // Coming soon sections
       const comingSoon = [];
@@ -319,103 +348,32 @@
         return;
       }
 
-      if (screen === 'upload') {
-        if (window.Upload) {
-          Upload.showPage();
-        } else {
-          this.toast(appLang === 'ro' ? 'Se încarcă modulul Upload...' : 'Loading Upload module...', 'info');
-          let retries = 0;
-          const retryInterval = setInterval(() => {
-            retries++;
-            if (window.Upload) { clearInterval(retryInterval); Upload.showPage(); }
-            else if (retries >= 15) { clearInterval(retryInterval); this.toast(appLang === 'ro' ? 'Eroare' : 'Error', 'error'); }
-          }, 200);
-        }
-      } else if (screen === 'industry') {
-        if (window.Industry) {
-          Industry.showPage();
-        } else {
-          this.toast(appLang === 'ro' ? 'Se încarcă Industry...' : 'Loading Industry...', 'info');
-          let retries = 0;
-          const retryInterval = setInterval(() => {
-            retries++;
-            if (window.Industry) { clearInterval(retryInterval); Industry.showPage(); }
-            else if (retries >= 15) { clearInterval(retryInterval); this.toast(appLang === 'ro' ? 'Eroare' : 'Error', 'error'); }
-          }, 200);
-        }
-      } else if (screen === 'franchises') {
-        if (window.Franchises) {
-          Franchises.showPage();
-        } else {
-          this.toast(appLang === 'ro' ? 'Se încarcă Francize...' : 'Loading Franchises...', 'info');
-          let retries = 0;
-          const retryInterval = setInterval(() => {
-            retries++;
-            if (window.Franchises) { clearInterval(retryInterval); Franchises.showPage(); }
-            else if (retries >= 15) { clearInterval(retryInterval); this.toast(appLang === 'ro' ? 'Eroare' : 'Error', 'error'); }
-          }, 200);
-        }
-      } else if (screen === 'discover') {
-        if (window.Discover) {
-          Discover.showPage();
-        } else {
-          this.toast(appLang === 'ro' ? 'Se încarcă Discover...' : 'Loading Discover...', 'info');
-          let retries = 0;
-          const retryInterval = setInterval(() => {
-            retries++;
-            if (window.Discover) { clearInterval(retryInterval); Discover.showPage(); }
-            else if (retries >= 15) { clearInterval(retryInterval); this.toast(appLang === 'ro' ? 'Eroare' : 'Error', 'error'); }
-          }, 200);
-        }
-      } else if (screen === 'addon') {
-        if (window.Addon) {
-          Addon.showPage();
-        } else {
-          this.toast(appLang === 'ro' ? 'Se încarcă Add-on...' : 'Loading Add-on...', 'info');
-          let retries = 0;
-          const retryInterval = setInterval(() => {
-            retries++;
-            if (window.Addon) { clearInterval(retryInterval); Addon.showPage(); }
-            else if (retries >= 15) { clearInterval(retryInterval); this.toast(appLang === 'ro' ? 'Eroare' : 'Error', 'error'); }
-          }, 200);
-        }
-      } else if (screen === 'addon-marketplace') {
-        if (window.AddonMarketplace) {
-          AddonMarketplace.showPage();
-        } else {
-          this.toast(appLang === 'ro' ? 'Se încarcă Marketplace...' : 'Loading Marketplace...', 'info');
-          let retries = 0;
-          const retryInterval = setInterval(() => {
-            retries++;
-            if (window.AddonMarketplace) { clearInterval(retryInterval); AddonMarketplace.showPage(); }
-            else if (retries >= 15) { clearInterval(retryInterval); this.toast(appLang === 'ro' ? 'Eroare' : 'Error', 'error'); }
-          }, 200);
-        }
-      } else if (screen === 'continent') {
-        if (window.Continent) {
-          Continent.showPage();
-        } else {
-          this.toast(appLang === 'ro' ? 'Se încarcă Continent...' : 'Loading Continent...', 'info');
-          let retries = 0;
-          const retryInterval = setInterval(() => {
-            retries++;
-            if (window.Continent) { clearInterval(retryInterval); Continent.showPage(); }
-            else if (retries >= 15) { clearInterval(retryInterval); this.toast(appLang === 'ro' ? 'Eroare' : 'Error', 'error'); }
-          }, 200);
-        }
-      } else if (screen === 'content') {
-        if (window.Content) {
-          Content.showPage();
-        } else {
-          this.toast(appLang === 'ro' ? 'Se încarcă Biblioteca de Conținut...' : 'Loading Content Library...', 'info');
-          let retries = 0;
-          const retryInterval = setInterval(() => {
-            retries++;
-            if (window.Content) { clearInterval(retryInterval); Content.showPage(); }
-            else if (retries >= 15) { clearInterval(retryInterval); this.toast(appLang === 'ro' ? 'Eroare' : 'Error', 'error'); }
-          }, 200);
-        }
-      } else if (screen === 'my-list') {
+      // Dynamic module loader - loads JS file on demand
+      const moduleMap = {
+        'upload': ['Upload', '/js/upload.js'],
+        'industry': ['Industry', '/js/industry.js'],
+        'franchises': ['Franchises', '/js/franchises.js'],
+        'content': ['Content', '/js/content.js'],
+        'discover': ['Discover', '/js/discover.js'],
+        'addon': ['Addon', '/js/addon.js'],
+        'addon-marketplace': ['AddonMarketplace', '/js/addon-marketplace.js'],
+        'continent': ['Continent', '/js/continent.js'],
+      };
+
+      if (moduleMap[screen]) {
+        const [moduleName, scriptPath] = moduleMap[screen];
+        this.toast(appLang === 'ro' ? 'Se încarcă...' : 'Loading...', 'info');
+        this.loadModuleScript(screen, moduleName, scriptPath).then(loaded => {
+          if (loaded && window[moduleName]?.showPage) {
+            window[moduleName].showPage();
+          } else {
+            this.toast(appLang === 'ro' ? 'Eroare la încărcare' : 'Load error', 'error');
+          }
+        });
+        return;
+      }
+
+      if (screen === 'my-list') {
         this.renderMyList();
         this.showScreen('my-list');
       } else if (screen === 'notifications') {
